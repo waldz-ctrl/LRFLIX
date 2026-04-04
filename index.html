@@ -1,0 +1,849 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LRFlix - Learning Resource Portal</title>
+    <meta name="description"
+        content="LRFlix – A Netflix-style learning resource portal for teachers and students in Batanes.">
+    <link rel="icon" type="image/x-icon" href="src/favicon.ico">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"
+        rel="stylesheet">
+    <!-- Font Awesome - using two CDN sources for reliability -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css"
+        referrerpolicy="no-referrer">
+
+    <link rel="stylesheet" href="css/style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <script>pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';</script>
+</head>
+
+<body>
+
+    <!-- Registration Success Modal -->
+    <div id="reg-success-modal" class="modal-overlay hidden">
+        <div class="modal-content" style="max-width:380px; padding:2.5rem; text-align:center; transform:none;">
+            <i class="fas fa-check-circle"
+                style="font-size:3.5rem; color:#2ecc71; margin-bottom:1rem; display:block;"></i>
+            <h3 style="font-size:1.4rem; margin-bottom:0.5rem;">Registration Successful!</h3>
+            <p style="margin-bottom:1.5rem; color:#aaa;">You can now log in using your username and password.</p>
+            <button class="btn btn-primary" id="close-reg-success" style="width:100%;">Continue to Login</button>
+        </div>
+    </div>
+
+    <!-- Auth View -->
+    <div id="auth-view" class="auth-container hidden">
+        <div id="auth-brand">LRFLIX</div>
+        <div class="auth-box">
+            <h2 id="auth-title">Sign In</h2>
+            <form id="auth-form" autocomplete="off">
+
+                <!-- Role selector -->
+                <div id="role-selector-group" class="input-group hidden">
+                    <label>Role <span class="req">*</span></label>
+                    <select id="user_role"
+                        style="width:100%; padding:0.78rem 0.9rem; border-radius:6px; border:1px solid rgba(255,255,255,0.1); background:#2b2b2b; color:white; font-size:0.92rem; outline:none;">
+                        <option value="">Select your role...</option>
+                        <option value="teacher">Teacher / School Personnel</option>
+                        <option value="student">Student / Learner</option>
+                    </select>
+                </div>
+
+                <!-- Login fields (always visible) -->
+                <div class="input-group">
+                    <label>Username <span class="tip" id="username-hint" style="display:none;">&#8211; will be used to
+                            log in (e.g. juan.delacruz)</span> <span id="username-error" style="color:#e50914; display:none; float:right; font-size:0.8rem;"></span></label>
+                    <input type="text" id="username" required placeholder="Enter username" autocomplete="username">
+                </div>
+                <div class="input-group">
+                    <label>Password</label>
+                    <div style="position:relative;">
+                        <input type="password" id="password" required placeholder="Enter password"
+                            autocomplete="current-password" style="width:100%; padding-right:40px;">
+                        <i class="fas fa-eye" id="toggle-pwd-icon" style="position:absolute; right:12px; top:50%; transform:translateY(-50%); cursor:pointer; color:#777;" onclick="const p=document.getElementById('password'); p.type=(p.type==='password'?'text':'password'); this.classList.toggle('fa-eye-slash');"></i>
+                    </div>
+                </div>
+                <div class="input-group hidden" id="repeat-password-group">
+                    <label>Repeat Password</label>
+                    <div style="position:relative;">
+                        <input type="password" id="repeat_password" placeholder="Re-enter password" style="width:100%; padding-right:40px;">
+                        <i class="fas fa-eye" id="toggle-rep-pwd-icon" style="position:absolute; right:12px; top:50%; transform:translateY(-50%); cursor:pointer; color:#777;" onclick="const p=document.getElementById('repeat_password'); p.type=(p.type==='password'?'text':'password'); this.classList.toggle('fa-eye-slash');"></i>
+                    </div>
+                </div>
+                <div class="input-group hidden" id="secret-question-group">
+                    <label>Secret Question <span class="req">*</span></label>
+                    <select id="secret_question" style="width:100%; padding:0.78rem 0.9rem; border-radius:6px; border:1px solid rgba(255,255,255,0.1); background:#2b2b2b; color:white; outline:none;">
+                        <option value="">Select a question for account recovery...</option>
+                        <option value="What is your mother's maiden name?">What is your mother's maiden name?</option>
+                        <option value="What was the name of your first pet?">What was the name of your first pet?</option>
+                        <option value="What is your favorite mobile or computer game?">What is your favorite mobile or computer game?</option>
+                        <option value="Which municipality were you born in?">Which municipality were you born in?</option>
+                    </select>
+                </div>
+                <div class="input-group hidden" id="secret-answer-group">
+                    <label>Secret Answer <span class="req">*</span></label>
+                    <input type="text" id="secret_answer" placeholder="Your answer">
+                </div>
+
+                <!-- TEACHER FIELDS -->
+                <div id="teacher-fields" class="hidden">
+                    <div class="form-section">
+                        <div class="form-section-title">Personal Information</div>
+                        <div class="form-row">
+                            <div class="input-group">
+                                <label>Last Name <span style="color:var(--accent-color)">*</span></label>
+                                <input type="text" id="last_name" placeholder="Dela Cruz">
+                            </div>
+                            <div class="input-group">
+                                <label>First Name <span style="color:var(--accent-color)">*</span></label>
+                                <input type="text" id="first_name" placeholder="Juan">
+                            </div>
+
+                        </div>
+
+                        <div class="input-group">
+                            <label>Middle Name <span class="tip">(optional)</span></label>
+                            <input type="text" id="middle_name" placeholder="Leave blank if none">
+                        </div>
+                        <div class="form-row">
+                            <div class="input-group">
+                                <label>Age Range <span class="req">*</span></label>
+                                <select id="age_range"
+                                    style="width:100%;padding:0.8rem 1rem;border-radius:6px;border:1px solid rgba(255,255,255,0.1);background:#2b2b2b;color:white;outline:none;">
+                                    <option value="">Select...</option>
+                                    <option value="15-24">15–24</option>
+                                    <option value="25-34">25–34</option>
+                                    <option value="35-44">35–44</option>
+                                    <option value="45-54">45–54</option>
+                                    <option value="55-64">55–64</option>
+                                    <option value="65+">65 or older</option>
+                                </select>
+                            </div>
+                            <div class="input-group">
+                                <label>Years in Service <span class="req">*</span></label>
+                                <select id="years_in_service"
+                                    style="width:100%;padding:0.8rem 1rem;border-radius:6px;border:1px solid rgba(255,255,255,0.1);background:#2b2b2b;color:white;outline:none;">
+                                    <option value="">Select...</option>
+                                    <option value="1-5">1–5 years</option>
+                                    <option value="6-10">6–10 years</option>
+                                    <option value="11-15">11–15 years</option>
+                                    <option value="16-20">16–20 years</option>
+                                    <option value="More than 20">More than 20 years</option>
+                                </select>
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                    <!-- Professional Info -->
+                    <div class="form-section">
+                        <div class="form-section-title">Professional Information</div>
+                        <div class="input-group">
+                            <label>Position <span class="req">*</span></label>
+                            <select id="position"
+                                style="width:100%;padding:0.8rem 1rem;border-radius:6px;border:1px solid rgba(255,255,255,0.1);background:#2b2b2b;color:white;outline:none;">
+                                <option value="">Select position...</option>
+                                <optgroup label="Teaching Staff">
+                                    <option value="Teacher I">Teacher I</option>
+                                    <option value="Teacher II">Teacher II</option>
+                                    <option value="Teacher III">Teacher III</option>
+                                    <option value="Teacher IV">Teacher IV</option>
+                                    <option value="Teacher V">Teacher V</option>
+                                    <option value="Teacher VI">Teacher VI</option>
+                                    <option value="Teacher VII">Teacher VII</option>
+                                    <option value="Master Teacher I">Master Teacher I</option>
+                                    <option value="Master Teacher II">Master Teacher II</option>
+                                    <option value="Master Teacher III">Master Teacher III</option>
+                                    <option value="Master Teacher IV">Master Teacher IV</option>
+                                </optgroup>
+                                <optgroup label="School Leadership">
+                                    <option value="Principal I">Principal I</option>
+                                    <option value="Principal II">Principal II</option>
+                                    <option value="Principal III">Principal III</option>
+                                    <option value="Principal IV">Principal IV</option>
+                                </optgroup>
+                                <optgroup label="Division Office">
+                                    <option value="School Admin Personnel">School Admin Personnel</option>
+                                    <option value="SDO Personnel">SDO Personnel</option>
+                                    <option value="Education Program Supervisor">Education Program Supervisor</option>
+                                </optgroup>
+                            </select>
+                        </div>
+                        <div class="form-row">
+                            <div class="input-group">
+                                <label>School / Office <span class="req">*</span></label>
+                                <select id="school"
+                                    style="width:100%;padding:0.8rem 1rem;border-radius:6px;border:1px solid rgba(255,255,255,0.1);background:#2b2b2b;color:white;outline:none;">
+                                    <option value="">Select...</option>
+                                    <option value="SDO Batanes">SDO Batanes</option>
+
+
+                                    <optgroup label="Elementary Schools">
+                                        <option value="ChanarianES">ChanarianES</option>
+                                        <option value="DiptanES">DiptanES</option>
+                                        <option value="TukonES">TukonES</option>
+                                        <option value="MayanES">MayanES</option>
+                                        <option value="IvanaES">IvanaES</option>
+                                        <option value="SanVicenteES">SanVicenteES</option>
+                                        <option value="ChavayanES">ChavayanES</option>
+                                        <option value="NakanmuanES">NakanmuanES</option>
+                                        <option value="SavidugES">SavidugES</option>
+                                        <option value="SumnangaES">SumnangaES</option>
+                                        <option value="ImnajbuES">ImnajbuES</option>
+                                        <option value="UyuganES">UyuganES</option>
+                                        <option value="YawranBS">YawranBS</option>
+                                        <option value="DiuraBS">DiuraBS</option>
+                                    </optgroup>
+                                    <optgroup label="Central/Integrated Schools">
+                                        <option value="BascoCS">BascoCS</option>
+                                        <option value="ItbayatCS">ItbayatCS</option>
+                                        <option value="MahataoCS">MahataoCS</option>
+                                        <option value="SabtangCS">SabtangCS</option>
+                                        <option value="SaintDC">SaintDC</option>
+                                    </optgroup>
+                                    <optgroup label="High Schools">
+                                        <option value="BatanesNSHS">BatanesNSHS</option>
+                                        <option value="ItbayatNAHS">ItbayatNAHS</option>
+                                        <option value="IvanaNHS">IvanaNHS</option>
+                                        <option value="MahataoNHS">MahataoNHS</option>
+                                        <option value="SabtangNSF">SabtangNSF</option>
+                                        <option value="BatanesGCHS">BatanesGCHS</option>
+                                    </optgroup>
+                                    <optgroup label="Integrated & Private Schools">
+                                        <option value="ValuganIS">ValuganIS</option>
+                                        <option value="RaeleIS">RaeleIS</option>
+                                        <option value="ItbudIS">ItbudIS</option>
+                                    </optgroup>
+                                </select>
+                            </div>
+                            <div class="input-group">
+                                <label>Major <span class="tip">(secondary only)</span></label>
+                                <select id="major"
+                                    style="width:100%;padding:0.8rem 1rem;border-radius:6px;border:1px solid rgba(255,255,255,0.1);background:#2b2b2b;color:white;outline:none;">
+                                    <option value="">None</option>
+                                    <option value="English">English</option>
+                                    <option value="Mathematics">Mathematics</option>
+                                    <option value="Filipino">Filipino</option>
+                                    <option value="Science">Science</option>
+                                    <option value="MAPEH">MAPEH</option>
+                                    <option value="TLE">TLE</option>
+                                    <option value="GMRC">GMRC</option>
+                                    <option value="Araling Panlipunan">Araling Panlipunan</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="input-group">
+                            <label>DepEd Email Address <span class="req">*</span></label>
+                            <input type="email" id="deped_email" placeholder="yourname@deped.gov.ph">
+                        </div>
+
+
+                    </div>
+
+                    <!-- Teaching Assignment -->
+                    <div id="teaching-assignment-section" class="form-section">
+
+                        <div class="form-section-title">Teaching Assignment</div>
+                        <div class="input-group">
+                            <label>Subjects Taught <span class="req">*</span></label>
+                            <div id="subjects_taught" class="checkbox-group">
+
+                                <label><input type="checkbox" value="English"> English</label>
+                                <label><input type="checkbox" value="Math"> Math</label>
+                                <label><input type="checkbox" value="Science"> Science</label>
+                                <label><input type="checkbox" value="Filipino"> Filipino</label>
+                                <label><input type="checkbox" value="TLE"> TLE</label>
+                                <label><input type="checkbox" value="MAPEH"> MAPEH</label>
+                                <label><input type="checkbox" value="Araling Panlipunan"> Araling Panlipunan</label>
+                                <label><input type="checkbox" value="GMRC"> GMRC</label>
+                                <label><input type="checkbox" value="SHS Subjects"> SHS Subjects</label>
+                            </div>
+                        </div>
+                        <div class="input-group">
+                            <label>Grade Level Taught <span class="req">*</span></label>
+                            <div id="grade_level" class="checkbox-group">
+
+                                <label><input type="checkbox" value="Kinder"> Kinder</label>
+                                <label><input type="checkbox" value="Grade 1"> Grade 1</label>
+                                <label><input type="checkbox" value="Grade 2"> Grade 2</label>
+                                <label><input type="checkbox" value="Grade 3"> Grade 3</label>
+                                <label><input type="checkbox" value="Grade 4"> Grade 4</label>
+                                <label><input type="checkbox" value="Grade 5"> Grade 5</label>
+                                <label><input type="checkbox" value="Grade 6"> Grade 6</label>
+                                <label><input type="checkbox" value="Grade 7"> Grade 7</label>
+                                <label><input type="checkbox" value="Grade 8"> Grade 8</label>
+                                <label><input type="checkbox" value="Grade 9"> Grade 9</label>
+                                <label><input type="checkbox" value="Grade 10"> Grade 10</label>
+                                <label><input type="checkbox" value="Grade 11"> Grade 11</label>
+                                <label><input type="checkbox" value="Grade 12"> Grade 12</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- STUDENT FIELDS -->
+                <div id="student-fields" class="hidden">
+                    <div class="form-section">
+                        <div class="form-section-title">Student Information</div>
+                        <div class="form-row">
+                            <div class="input-group">
+                                <label>Last Name <span style="color:var(--accent-color)">*</span></label>
+                                <input type="text" id="s_last_name" placeholder="Dela Cruz">
+                            </div>
+                            <div class="input-group">
+                                <label>First Name <span style="color:var(--accent-color)">*</span></label>
+                                <input type="text" id="s_first_name" placeholder="Maria">
+                            </div>
+                        </div>
+
+
+                        <div class="input-group">
+                            <label>Middle Name <span class="tip">(optional)</span></label>
+                            <input type="text" id="s_middle_name" placeholder="Leave blank if none">
+                        </div>
+                        <div class="form-row">
+                            <div class="input-group">
+                                <label>Grade Level <span class="req">*</span></label>
+                                <select id="s_grade_level"
+                                    style="width:100%;padding:0.8rem 1rem;border-radius:6px;border:1px solid rgba(255,255,255,0.1);background:#2b2b2b;color:white;outline:none;">
+                                    <option value="">Select...</option>
+                                    <option value="Kinder">Kinder</option>
+                                    <option value="Grade 1">Grade 1</option>
+                                    <option value="Grade 2">Grade 2</option>
+                                    <option value="Grade 3">Grade 3</option>
+                                    <option value="Grade 4">Grade 4</option>
+                                    <option value="Grade 5">Grade 5</option>
+                                    <option value="Grade 6">Grade 6</option>
+                                    <option value="Grade 7">Grade 7</option>
+                                    <option value="Grade 8">Grade 8</option>
+                                    <option value="Grade 9">Grade 9</option>
+                                    <option value="Grade 10">Grade 10</option>
+                                    <option value="Grade 11">Grade 11</option>
+                                    <option value="Grade 12">Grade 12</option>
+                                </select>
+                            </div>
+                            <div class="input-group">
+                                <label>Age Range <span class="req">*</span></label>
+                                <select id="s_age_range"
+                                    style="width:100%;padding:0.8rem 1rem;border-radius:6px;border:1px solid rgba(255,255,255,0.1);background:#2b2b2b;color:white;outline:none;">
+                                    <option value="">Select...</option>
+                                    <option value="5-14">5–14</option>
+                                    <option value="15-24">15–24</option>
+                                    <option value="25-34">25–34</option>
+                                    <option value="35-44">35–44</option>
+                                </select>
+                            </div>
+                        </div>
+
+
+                        <div class="input-group">
+                            <label>School <span class="req">*</span></label>
+                            <select id="s_school"
+                                style="width:100%;padding:0.8rem 1rem;border-radius:6px;border:1px solid rgba(255,255,255,0.1);background:#2b2b2b;color:white;outline:none;">
+                                <option value="">Select school...</option>
+                                <optgroup label="Elementary Schools">
+                                    <option value="ChanarianES">ChanarianES</option>
+                                    <option value="DiptanES">DiptanES</option>
+                                    <option value="TukonES">TukonES</option>
+                                    <option value="MayanES">MayanES</option>
+                                    <option value="IvanaES">IvanaES</option>
+                                    <option value="SanVicenteES">SanVicenteES</option>
+                                    <option value="ChavayanES">ChavayanES</option>
+                                    <option value="SabtangCS">SabtangCS</option>
+                                    <option value="SavidugES">SavidugES</option>
+                                    <option value="SumnangaES">SumnangaES</option>
+                                    <option value="ImnajbuES">ImnajbuES</option>
+                                    <option value="UyuganES">UyuganES</option>
+                                    <option value="YawranBS">YawranBS</option>
+                                    <option value="DiuraBS">DiuraBS</option>
+                                </optgroup>
+                                <optgroup label="High Schools">
+                                    <option value="BatanesNSHS">BatanesNSHS</option>
+                                    <option value="ItbayatNAHS">ItbayatNAHS</option>
+                                    <option value="IvanaNHS">IvanaNHS</option>
+                                    <option value="MahataoNHS">MahataoNHS</option>
+                                    <option value="SabtangNSF">SabtangNSF</option>
+                                    <option value="BatanesGCHS">BatanesGCHS</option>
+                                </optgroup>
+                                <optgroup label="Integrated & Private Schools">
+                                    <option value="ValuganIS">ValuganIS</option>
+                                    <option value="RaeleIS">RaeleIS</option>
+                                    <option value="ItbudIS">ItbudIS</option>
+                                    <option value="SaintDC">SaintDC</option>
+                                </optgroup>
+                            </select>
+                        </div>
+
+
+                        <div class="input-group">
+                            <label>Email Address <span class="tip">(optional)</span></label>
+                            <input type="email" id="s_email" placeholder="your@email.com">
+                        </div>
+                    </div>
+                </div>
+
+                <div style="display:block;">
+                    <button type="submit" class="btn btn-primary" id="auth-submit-btn" disabled
+                        style="width:100%; margin-top:0.5rem; font-size:1rem; padding:0.9rem;">Let's Learn</button>
+                </div>
+
+
+            </form>
+            <div class="auth-links" style="margin-top:1rem; display:flex; flex-direction:column; gap:8px;">
+                <div style="display:flex; justify-content:space-between; width:100%;">
+                    <p id="auth-toggle-text">New to LRFlix? <a href="#" id="toggle-auth">Sign up now.</a></p>
+                    <p id="forgot-password-container"><a href="#" id="forgot-password-link" onclick="openForgotPassword()">Forgot Password?</a></p>
+                </div>
+                <p id="auth-message" style="color:var(--accent-color); font-size:0.9rem;"></p>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- Forgot Password Modal -->
+    <div id="forgot-password-modal" class="modal-overlay hidden">
+        <div class="modal-content" style="max-width:400px; padding:2rem;">
+            <button class="modal-close" onclick="closeForgotPassword()">&times;</button>
+            <h2 style="margin-bottom:1.5rem;"><i class="fas fa-lock"></i> Forgot Password</h2>
+            
+            <div id="fp-step-1">
+                <p style="color:#aaa; font-size:0.9rem; margin-bottom:1rem;">Enter your username to begin account recovery.</p>
+                <div class="input-group">
+                    <input type="text" id="fp-username" placeholder="Username">
+                </div>
+                <button class="btn btn-primary" style="width:100%; margin-top:10px;" onclick="verifyUsername()">Next</button>
+            </div>
+
+            <div id="fp-step-2" class="hidden">
+                <p style="color:#aaa; font-size:0.9rem; margin-bottom:1rem;">Answer your secret question to reset your password.</p>
+                <div class="input-group">
+                    <label id="fp-question" style="color:#ddd; font-weight:600;"></label>
+                    <input type="text" id="fp-answer" placeholder="Your answer">
+                </div>
+                <div class="input-group" style="margin-top:10px;">
+                    <label>New Password</label>
+                    <input type="password" id="fp-new-password" placeholder="New password">
+                </div>
+                <button class="btn btn-primary" style="width:100%; margin-top:10px;" onclick="resetPassword()">Reset Password</button>
+            </div>
+            
+            <p id="fp-message" style="color:var(--accent-color); margin-top:15px; font-size:0.9rem;"></p>
+        </div>
+    </div>
+
+
+    <!-- Main App View -->
+    <div id="app-view" class="hidden">
+        <nav id="navbar">
+            <div style="display:flex; align-items:center; gap:20px;">
+                <div class="brand" style="cursor:pointer;" onclick="window.location.reload();">LRFLIX</div>
+                <div class="cat-menu">
+                    <button class="btn btn-secondary"
+                        style="background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.1);"><i
+                            class="fas fa-list"></i> Categories ▼</button>
+                    <div class="cat-content">
+                        <a onclick="filterCategory('MATATAG Materials')">MATATAG Materials</a>
+                        <a onclick="filterCategory('National Reading Program')">National Reading Program</a>
+                        <a onclick="filterCategory('NLC 2024 Materials')">NLC 2024 Materials</a>
+                        <a onclick="filterCategory('Contextualized Learning Resources')">Contextualized Learning
+                            Resources</a>
+                        <a onclick="filterCategory('Localized Graphics/Illustrations')">Localized
+                            Graphics/Illustrations</a>
+                        <a onclick="filterCategory('Audio Learning Resources')">Audio Learning Resources</a>
+                        <a onclick="filterCategory('Video Learning Resources')">Video Learning Resources</a>
+                        <a onclick="filterCategory('Self-Learning Modules')">Self-Learning Modules</a>
+                        <a onclick="filterCategory('Learning Activity Sheets')">Learning Activity Sheets</a>
+                        <a onclick="filterCategory('Digitalized Learning Resources')">Digitalized Learning Resources</a>
+                    </div>
+                </div>
+                <div class="search-container" style="position:relative; margin-left:10px;">
+                    <i class="fas fa-search"
+                        style="position:absolute; left:12px; top:50%; transform:translateY(-50%); color:#777;"></i>
+                    <input type="text" id="main-search" placeholder="Search titles or authors..."
+                        style="background:#141414; border:1px solid #333; color:white; padding:8px 12px 8px 35px; border-radius:20px; width:250px; font-size:0.9rem; transition: width 0.3s, border-color 0.3s; outline:none;">
+                </div>
+            </div>
+            <div class="nav-links">
+                <span id="welcome-user" style="font-size:0.9rem; color:#ccc; font-weight:500; cursor:pointer;"
+                    title="View Profile"></span>
+                <div id="nav-profile-circle"
+                    style="width:36px; height:36px; border-radius:50%; background:#e50914; color:white; display:none; align-items:center; justify-content:center; font-weight:800; cursor:pointer; font-size:1.1rem; margin-left:10px;">
+                    ?</div>
+                <button id="admin-btn" class="btn btn-secondary hidden"
+                    onclick="window.location.href='management-hub.php'">Admin Panel</button>
+                <button id="logout-btn" class="btn btn-primary" style="padding:8px 16px;"><i
+                        class="fas fa-sign-out-alt"></i> Logout</button>
+            </div>
+
+
+        </nav>
+
+
+
+        <!-- Hero -->
+        <section id="hero-section" class="hero">
+            <div class="hero-content">
+                <span id="hero-badge"
+                    style="background:var(--accent-color); color:white; padding:3px 8px; font-weight:700; border-radius:4px; font-size:0.75rem; margin-bottom:10px; display:inline-block;">Featured</span>
+                <h1 id="hero-title" style="margin-bottom:15px; text-shadow:2px 2px 4px rgba(0,0,0,0.9);">Welcome to
+                    LRFlix</h1>
+                <p id="hero-desc"
+                    style="margin-bottom:20px; text-shadow:1px 1px 3px rgba(0,0,0,0.8); display:-webkit-box; -webkit-line-clamp:3; line-clamp:3; -webkit-box-orient:vertical; overflow:hidden;">
+                    Explore high-quality learning resources curated for the Batanes community.</p>
+                <div class="hero-buttons">
+                    <button id="hero-view-btn" class="btn btn-primary"><i class="fas fa-play"></i> Get Started</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Category Full View -->
+        <div id="category-full-view" class="hidden" style="padding:110px 4% 50px;">
+            <div
+                style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:10px;">
+                <h2 id="category-full-title" style="font-size:clamp(1.4rem,4vw,2rem);">Category</h2>
+                <button class="btn btn-secondary" onclick="window.location.reload()"><i class="fas fa-arrow-left"></i>
+                    Back</button>
+            </div>
+            <div id="category-full-grid" style="display:flex; flex-wrap:wrap; gap:12px; justify-content:flex-start;">
+            </div>
+        </div>
+
+        <!-- Dynamic Rows -->
+        <div id="dynamic-categories-container" style="padding-bottom:50px;"></div>
+
+        <!-- Profile Section -->
+        <div id="profile-section" class="hidden" style="padding: 100px 4% 50px 4%;">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:2rem;">
+                <h1 style="font-size:2.5rem; font-weight:800;">My Profile</h1>
+                <button class="btn btn-secondary" onclick="closeProfile()"><i class="fas fa-times"></i> Close
+                    Profile</button>
+            </div>
+
+            <div style="display:grid; grid-template-columns: 280px 1fr; gap:40px;">
+                <div
+                    style="background:#1a1a1a; padding:2rem; border-radius:12px; height:fit-content; border:1px solid #333;">
+                    <div style="width:120px; height:120px; background:#e50914; border-radius:50%; margin:0 auto 1.5rem; display:flex; align-items:center; justify-content:center; font-size:3.5rem; font-weight:800;"
+                        id="profile-initials">?</div>
+                    <h2 id="profile-fullname" style="text-align:center; margin-bottom:1.5rem; font-size:1.4rem;">User
+                        Name</h2>
+
+
+                    <div style="border-top:1px solid #333; padding-top:1.5rem;">
+                        <div style="margin-bottom:12px;">
+                            <label
+                                style="display:block; color:#777; font-size:0.75rem; text-transform:uppercase;">School</label>
+                            <span id="profile-school" style="color:#ddd; font-weight:600;">—</span>
+                        </div>
+                        <div style="margin-bottom:12px;">
+                            <label
+                                style="display:block; color:#777; font-size:0.75rem; text-transform:uppercase;">Position</label>
+                            <span id="profile-position" style="color:#ddd; font-weight:600;">—</span>
+                        </div>
+                    </div>
+
+                    <button class="btn btn-secondary" onclick="window.openEditProfileModal()"
+                        style="width:100%; margin-top:1.5rem; justify-content:center;">
+                        <i class="fas fa-user-edit"></i> Edit Profile
+                    </button>
+                </div>
+
+                <div>
+                    <div class="profile-tabs"
+                        style="display:flex; gap:10px; margin-bottom:25px; border-bottom:1px solid #333; padding-bottom:15px;">
+                        <button class="btn btn-primary prof-tab active" onclick="switchProfileTab('liked')">Liked
+                            Resources</button>
+                        <button class="btn btn-secondary prof-tab" onclick="switchProfileTab('downloaded')">Downloaded
+                            Resources</button>
+                        <button class="btn btn-secondary prof-tab" onclick="switchProfileTab('feedback')">Suggestions &
+                            Feedback</button>
+                    </div>
+
+
+                    <div id="profile-tab-content"
+                        style="display:grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap:20px;">
+                        <!-- Dynamic items -->
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+    </div>
+
+
+
+    <!-- Resource Detail Modal -->
+    <div id="resource-modal" class="modal-overlay hidden">
+        <div class="modal-content"
+            style="padding:0; overflow:hidden; border-radius:12px; border:1px solid #333; width:92%; max-width:860px; max-height:92vh; overflow-y:auto; background:#141414; box-shadow:0 30px 90px rgba(0,0,0,0.9);">
+            <button class="modal-close" id="close-modal"
+                style="top:1.2rem; right:1.2rem; background:rgba(0,0,0,0.6);"><i class="fas fa-times"
+                    style="font-size:1.4rem;"></i></button>
+
+            <div class="modal-header"
+                style="position:relative; height:50vh; min-height:280px; background:#000; overflow:hidden; display:block; padding:0;">
+                <canvas id="modal-pdf-canvas"
+                    style="width:100%; height:100%; display:block; object-fit:cover; filter:brightness(0.6);"></canvas>
+                <div
+                    style="position:absolute; bottom:0; left:0; width:100%; height:100%; background:linear-gradient(to top,#141414 10%,transparent 80%);">
+                </div>
+                <div style="position:absolute; bottom:20px; left:50px; z-index:10; width:90%;">
+                    <h1 id="modal-title"
+                        style="font-size:clamp(1.8rem,5vw,3rem); text-shadow:2px 2px 15px rgba(0,0,0,1); margin-bottom:8px; line-height:1.1; font-weight:900;">
+                        Resource Title</h1>
+                    <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+                        <span id="modal-grade"
+                            style="background:#fff; color:#000; padding:4px 10px; border-radius:4px; font-weight:900; font-size:0.85rem;">Grade</span>
+                        <span id="modal-subject"
+                            style="background:rgba(255,255,255,0.2); color:#fff; padding:4px 10px; border-radius:4px; font-weight:700; font-size:0.85rem; border:1px solid rgba(255,255,255,0.1);">Subject</span>
+                        <span id="modal-authors"
+                            style="color:#eee; font-style:italic; font-size:1rem; margin-left:10px; text-shadow:1px 1px 4px #000;">By:
+                            Author Name</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-body" style="padding: 1.5rem 50px 3rem 50px;">
+
+                <div style="display:flex; gap:16px; margin-bottom:24px; flex-wrap:wrap;">
+                    <button class="btn btn-primary" id="btn-view" style="padding:10px 24px;"><i class="fas fa-play"></i>
+                        View Now</button>
+                    <button class="btn btn-secondary" id="btn-download" style="padding:10px 20px;"><i
+                            class="fas fa-download"></i> Download</button>
+                    <button class="btn btn-secondary" id="btn-like" style="min-width:120px; padding:10px 20px;"><i
+                            class="far fa-heart"></i> Like</button>
+                </div>
+
+                <div
+                    style="display:flex; gap:30px; margin-bottom:30px; border-bottom:1px solid #2a2a2a; padding-bottom:20px;">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <div
+                            style="background:rgba(229,9,20,0.15); width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center;">
+                            <i class="fas fa-heart" style="color:#e50914;"></i>
+                        </div>
+                        <div style="display:flex; flex-direction:column;">
+                            <span
+                                style="color:#aaa; font-size:0.75rem; text-transform:uppercase; letter-spacing:0.05em;">Likes</span>
+                            <span id="modal-likes" style="color:white; font-weight:700; font-size:1.1rem;">0</span>
+                        </div>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <div
+                            style="background:rgba(52,152,219,0.15); width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center;">
+                            <i class="fas fa-cloud-download-alt" style="color:#3498db;"></i>
+                        </div>
+                        <div style="display:flex; flex-direction:column;">
+                            <span
+                                style="color:#aaa; font-size:0.75rem; text-transform:uppercase; letter-spacing:0.05em;">Downloads</span>
+                            <span id="modal-downloads" style="color:white; font-weight:700; font-size:1.1rem;">0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="display:flex; gap:30px; flex-wrap:wrap;">
+                    <div style="flex:2; min-width:300px;">
+                        <h3
+                            style="margin-bottom:10px; color:#e50914; font-size:0.85rem; text-transform:uppercase; letter-spacing:0.1em; font-weight:800;">
+                            Description</h3>
+                        <p id="modal-description"
+                            style="line-height:1.8; color:#eee; font-size:1rem; margin-bottom:24px;"></p>
+
+                        <h3
+                            style="margin-bottom:10px; color:#e50914; font-size:0.85rem; text-transform:uppercase; letter-spacing:0.1em; font-weight:800;">
+                            Learning Competencies</h3>
+                        <p id="modal-competencies" style="line-height:1.8; color:#ccc; font-size:0.95rem;"></p>
+
+                        <h3 style="margin-top:24px; margin-bottom:10px; color:#e50914; font-size:0.85rem; text-transform:uppercase; letter-spacing:0.1em; font-weight:800;">
+                            Submit Comment / Error Report</h3>
+                        <div style="background:#1a1a1a; padding:15px; border-radius:8px; border:1px solid #333;">
+                            <textarea id="lr-comment-text" rows="3" placeholder="Describe any errors or leave a comment about this resource..." style="width:100%; max-width:100%; box-sizing:border-box; border:none; background:transparent; color:#fff; outline:none; resize:vertical; font-family:inherit; font-size:0.95rem; margin-bottom:10px;"></textarea>
+                            <div style="display:flex; justify-content:flex-end;">
+                                <button class="btn btn-secondary" onclick="submitLRComment()" style="padding:8px 20px; font-size:0.9rem;"><i class="fas fa-paper-plane"></i> Submit Comment</button>
+                            </div>
+                            <div id="lr-comment-msg" style="color:lightgreen; font-size:0.85rem; margin-top:5px; text-align:right;"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="related-resources-section"
+                    style="margin-top:40px; border-top:1px solid #2a2a2a; padding-top:30px;">
+                    <h3 style="margin-bottom:15px; font-size:1.2rem; font-weight:700;">Discover More</h3>
+                    <div id="related-resources-container" style="display:flex; gap:12px; flex-wrap:wrap;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    </div>
+    </div>
+    </div>
+
+
+    <!-- Edit Profile Modal -->
+    <div id="edit-profile-modal" class="modal-overlay hidden">
+        <div class="modal-content" style="max-width:850px; width:95%; padding:2rem; overflow:hidden;">
+            <button class="modal-close"
+                onclick="document.getElementById('edit-profile-modal').classList.add('hidden'); document.getElementById('edit-profile-modal').classList.remove('active');"><i
+                    class="fas fa-times"></i></button>
+            <h2 style="margin-bottom:1.5rem; border-bottom:1px solid #333; padding-bottom:10px;">Update Professional
+                Details</h2>
+
+            <form id="edit-profile-form" style="max-height:75vh; overflow-y:auto; padding-right:15px;">
+                <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:20px;">
+                    <div class="input-group">
+                        <label>First Name</label>
+                        <input type="text" id="edit_first_name" required>
+                    </div>
+                    <div class="input-group">
+                        <label>Middle Name</label>
+                        <input type="text" id="edit_middle_name">
+                    </div>
+                    <div class="input-group">
+                        <label>Last Name</label>
+                        <input type="text" id="edit_last_name" required>
+                    </div>
+                </div>
+
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px; margin-top:20px;">
+                    <div class="input-group">
+                        <label>Position</label>
+                        <input type="text" id="edit_position" placeholder="e.g. Teacher I, SDO Personnel">
+                    </div>
+                    <div class="input-group">
+                        <label>Age Range</label>
+                        <select id="edit_age_range">
+                            <option value="18-24">18-24</option>
+                            <option value="25-34">25-34</option>
+                            <option value="35-44">35-44</option>
+                            <option value="45-54">45-54</option>
+                            <option value="55-64">55-64</option>
+                            <option value="65+">65+</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div style="margin-top:20px; border-top:1px solid #333; padding-top:15px;">
+                    <label style="display:block; margin-bottom:10px; font-weight:600;">Teaching Assignment / Grade Level</label>
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:30px;">
+                        <div>
+                            <label style="font-size:0.8rem; color:#aaa; margin-bottom:10px; display:block;">Subjects Taught</label>
+                            <div id="edit_subjects_taught" class="checkbox-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                                <label><input type="checkbox" value="English"> English</label>
+                                <label><input type="checkbox" value="Math"> Math</label>
+                                <label><input type="checkbox" value="Science"> Science</label>
+                                <label><input type="checkbox" value="Filipino"> Filipino</label>
+                                <label><input type="checkbox" value="MAKABANSA"> MAKABANSA</label>
+                                <label><input type="checkbox" value="GMRC"> GMRC</label>
+                                <label><input type="checkbox" value="MAPEH"> MAPEH</label>
+                                <label><input type="checkbox" value="AP"> AP</label>
+                                <label><input type="checkbox" value="TLE"> TLE</label>
+                                <label><input type="checkbox" value="ESP"> ESP</label>
+                            </div>
+                        </div>
+                        <div>
+                            <label style="font-size:0.8rem; color:#aaa; margin-bottom:10px; display:block;">Grade Level</label>
+                            <div id="edit_grade_level" class="checkbox-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                                <label><input type="checkbox" value="Kinder"> Kinder</label>
+                                <label><input type="checkbox" value="Grade 1"> Grade 1</label>
+                                <label><input type="checkbox" value="Grade 2"> Grade 2</label>
+                                <label><input type="checkbox" value="Grade 3"> Grade 3</label>
+                                <label><input type="checkbox" value="Grade 4"> Grade 4</label>
+                                <label><input type="checkbox" value="Grade 5"> Grade 5</label>
+                                <label><input type="checkbox" value="Grade 6"> Grade 6</label>
+                                <label><input type="checkbox" value="Grade 7"> Grade 7</label>
+                                <label><input type="checkbox" value="Grade 8"> Grade 8</label>
+                                <label><input type="checkbox" value="Grade 9"> Grade 9</label>
+                                <label><input type="checkbox" value="Grade 10"> Grade 10</label>
+                                <label><input type="checkbox" value="Grade 11"> Grade 11</label>
+                                <label><input type="checkbox" value="Grade 12"> Grade 12</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="margin-top:20px; border-top:1px solid #333; padding-top:15px; display:grid; grid-template-columns: 1fr 1fr; gap:20px;">
+                    <div class="input-group">
+                        <label>New Password <span class="tip">(Leave blank to keep current)</span></label>
+                        <input type="password" id="edit_new_password" placeholder="Min. 6 characters">
+                    </div>
+                    <div class="input-group">
+                        <label>Repeat New Password</label>
+                        <input type="password" id="edit_repeat_password" placeholder="Confirm new password">
+                        <p id="edit_password_match" style="font-size:0.75rem; margin-top:5px;"></p>
+                    </div>
+                </div>
+
+                <div style="margin-top:30px; display:flex; justify-content:flex-end; gap:15px; border-top:1px solid #333; padding-top:20px;">
+                    <button type="button" class="btn btn-secondary" onclick="document.getElementById('edit-profile-modal').classList.add('hidden'); document.getElementById('edit-profile-modal').classList.remove('active');">Cancel</button>
+                    <button type="submit" class="btn btn-primary" style="min-width:180px;">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+
+    <!-- PDF Viewer Modal (fullscreen, intercepts all clicks) -->
+
+    <div id="pdf-viewer-modal" class="modal-overlay hidden">
+        <div onclick="event.stopPropagation();"
+            style="background:#1a1a1a; width:100vw; height:100vh; display:flex; flex-direction:column; overflow:hidden; position:fixed; inset:0; z-index:100001;">
+            <!-- Toolbar -->
+            <div onclick="event.stopPropagation();"
+                style="background:#111; padding:10px 14px; display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #333; flex-shrink:0; gap:8px; flex-wrap:wrap;">
+                <button class="btn btn-secondary" id="close-pdf-viewer" style="padding:7px 13px;"><i
+                        class="fas fa-arrow-left"></i> Back</button>
+
+                <div style="display:flex; align-items:center; gap:6px; color:white;">
+                    <button class="btn btn-secondary" id="pdf-prev-page" style="padding:7px 11px;"><i
+                            class="fas fa-chevron-left"></i> Prev</button>
+                    <span style="min-width:100px; text-align:center; font-size:0.88rem;">Page <span
+                            id="pdf-current-page">1</span> / <span id="pdf-total-pages">?</span></span>
+                    <button class="btn btn-secondary" id="pdf-next-page" style="padding:7px 11px;">Next <i
+                            class="fas fa-chevron-right"></i></button>
+                </div>
+
+                <!-- Zoom controls -->
+                <div style="display:flex; align-items:center; gap:4px;">
+                    <button class="btn btn-secondary" id="pdf-zoom-out" style="padding:7px 11px;" title="Zoom Out"><i
+                            class="fas fa-minus"></i></button>
+                    <span id="pdf-zoom-level"
+                        style="color:#ccc; font-size:0.85rem; min-width:44px; text-align:center;">100%</span>
+                    <button class="btn btn-secondary" id="pdf-zoom-in" style="padding:7px 11px;" title="Zoom In"><i
+                            class="fas fa-plus"></i></button>
+                    <button class="btn btn-secondary" id="pdf-zoom-fit-width" style="padding:7px 11px;"
+                        title="Fit to width"><i class="fas fa-arrows-alt-h"></i></button>
+                    <button class="btn btn-secondary" id="pdf-zoom-fit-height" style="padding:7px 11px;"
+                        title="Fit to height"><i class="fas fa-arrows-alt-v"></i></button>
+                </div>
+
+
+                <button class="btn btn-primary" id="pdf-viewer-download" style="padding:7px 13px;"><i
+                        class="fas fa-download"></i> Download</button>
+            </div>
+            <!-- Canvas area -->
+            <div id="pdf-viewer-container" onclick="event.stopPropagation();"
+                style="flex:1; overflow-y:auto; overflow-x:auto; display:flex; justify-content:center; align-items:flex-start; padding:24px 16px; background:#3a3a3a;">
+                <canvas id="pdf-render-canvas"
+                    style="box-shadow:0 8px 40px rgba(0,0,0,0.9); background:white; max-width:100%; height:auto;"></canvas>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- Feedback Success Modal -->
+    <div id="feedback-success-modal" class="modal-overlay hidden">
+        <div class="modal-content" style="max-width:400px; text-align:center; padding:3rem 2rem;">
+             <div style="width:80px; height:80px; background:#2ecc71; border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto 1.5rem; color:white; font-size:2.5rem;">
+                 <i class="fas fa-check"></i>
+             </div>
+             <h2 style="margin-bottom:10px;">Success!</h2>
+             <p style="color:#aaa; margin-bottom:2rem;">Your feedback has been sent to the administrators. Thank you for your contribution!</p>
+             <button class="btn btn-primary" onclick="document.getElementById('feedback-success-modal').classList.add('hidden')" style="width:100%;">Great!</button>
+        </div>
+    </div>
+
+    <script src="js/app.js"></script>
+</body>
+
+</html>

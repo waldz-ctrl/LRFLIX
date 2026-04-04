@@ -1,0 +1,18 @@
+# Disable all script engines (CGI, PHP, etc) for this directory
+<Files *>
+    SetHandler default-handler
+</Files>
+
+# Ensure PHP is definitely turned off if mod_php is used
+<IfModule mod_php.c>
+    php_flag engine off
+</IfModule>
+<IfModule mod_php5.c>
+    php_flag engine off
+</IfModule>
+<IfModule mod_php7.c>
+    php_flag engine off
+</IfModule>
+
+# Force download for certain types if needed, or just let them be served as plain static files
+Options -ExecCGI -Indexes
