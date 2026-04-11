@@ -1,7 +1,13 @@
 <?php
 require_once 'api/db.php';
+
+if (preg_match('#/management-hub\.php$#', $_SERVER['REQUEST_URI'] ?? '')) {
+    header('Location: /lrflix/admin/');
+    exit;
+}
+
 if (!isAdmin()) {
-    header('Location: index.html');
+    header('Location: /lrflix/');
     exit;
 }
 ?>
@@ -10,6 +16,7 @@ if (!isAdmin()) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <base href="/lrflix/">
     <title>Admin - LRFlix</title>
     <link rel="icon" type="image/x-icon" href="src/favicon.ico">
     <!-- Modern Fonts -->
@@ -43,7 +50,7 @@ if (!isAdmin()) {
     <nav id="navbar" class="scrolled">
         <div class="brand">LRFLIX ADMIN</div>
         <div class="nav-links">
-            <button class="btn btn-secondary" onclick="window.location.href='index.html'"><i class="fas fa-arrow-left"></i> Back to Portal</button>
+            <button class="btn btn-secondary" onclick="window.location.href='/lrflix/'"><i class="fas fa-arrow-left"></i> Back to Portal</button>
         </div>
     </nav>
     <div class="admin-tabs" style="display:flex; justify-content:center; gap: 1rem; padding-top: 100px; background:#141414; flex-wrap:wrap;">
@@ -101,6 +108,10 @@ if (!isAdmin()) {
                         <option value="">Select...</option>
                         <option value="SNED">SNED</option>
                         <option value="ALS">ALS</option>
+                        <option value="KS-1">KS-1</option>
+                        <option value="KS-2">KS-2</option>
+                        <option value="KS-3">KS-3</option>
+                        <option value="KS-4">KS-4</option>
                         <option value="Kinder">Kinder</option>
                         <option value="Grade 1">Grade 1</option>
                         <option value="Grade 2">Grade 2</option>
@@ -222,6 +233,11 @@ if (!isAdmin()) {
 
         <div id="manage-res-section" class="admin-card fade-in tab-content" style="display:none;">
             <h2>Manage Resources</h2>
+            <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin-bottom:1rem;">
+                <input type="text" id="resources-search" placeholder="Search by title..."
+                    style="flex:1; min-width:260px; padding:0.8rem 0.9rem; border-radius:6px; border:1px solid #333; background:#222; color:white;">
+                <button class="btn btn-secondary" id="resources-sort-downloads" type="button">Sort Downloads: High to Low</button>
+            </div>
             <div style="overflow-x:auto;">
                 <table class="data-table" id="resources-table">
                     <thead>
@@ -238,11 +254,24 @@ if (!isAdmin()) {
                     </tbody>
                 </table>
             </div>
+            <div id="resources-pagination" style="display:flex; justify-content:flex-end; gap:8px; margin-top:1rem; align-items:center;"></div>
         </div> <!-- End Manage Res Tab -->
 
         <!-- Manage Users Tab -->
         <div id="manage-usr-section" class="admin-card fade-in tab-content" style="display:none;">
             <h2>Manage Users</h2>
+            <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin-bottom:1rem;">
+                <input type="text" id="users-search" placeholder="Search by username..."
+                    style="flex:1; min-width:220px; padding:0.8rem 0.9rem; border-radius:6px; border:1px solid #333; background:#222; color:white;">
+                <select id="users-filter-school"
+                    style="min-width:220px; padding:0.8rem 0.9rem; border-radius:6px; border:1px solid #333; background:#222; color:white;">
+                    <option value="">All Schools/Offices</option>
+                </select>
+                <select id="users-filter-position"
+                    style="min-width:220px; padding:0.8rem 0.9rem; border-radius:6px; border:1px solid #333; background:#222; color:white;">
+                    <option value="">All Positions</option>
+                </select>
+            </div>
             <div style="overflow-x:auto;">
                 <table class="data-table" id="users-table">
                     <thead>
@@ -251,6 +280,7 @@ if (!isAdmin()) {
                             <th>Name</th>
                             <th>School/Office</th>
                             <th>Position</th>
+                            <th>Visits</th>
                             <th>Downloads</th>
                             <th>Last Login</th>
                             <th>Actions</th>
@@ -261,6 +291,7 @@ if (!isAdmin()) {
                     </tbody>
                 </table>
             </div>
+            <div id="users-pagination" style="display:flex; justify-content:flex-end; gap:8px; margin-top:1rem; align-items:center;"></div>
         </div>
 
         <!-- Analytics Tab -->
@@ -287,6 +318,13 @@ if (!isAdmin()) {
                 </div>
             </div>
 
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1rem; margin-top:-1rem; margin-bottom: 2rem;">
+                <div style="background:#1a1a2e; border-radius:8px; padding:1.2rem; text-align:center; border:1px solid #333;">
+                    <div style="font-size:2rem; font-weight:800; color:#9b59b6;" id="stat-visits">â€“</div>
+                    <div style="color:#aaa; font-size:0.9rem;">Total Site Visits</div>
+                </div>
+            </div>
+
             <!-- Period Toggle -->
             <div style="margin-bottom: 1.5rem; display:flex; gap: 10px; flex-wrap:wrap; align-items:center;">
                 <span style="color:#aaa; margin-right:5px;">Filter by:</span>
@@ -304,6 +342,12 @@ if (!isAdmin()) {
             <!-- Charts: stacked full width -->
             <div style="display:flex; flex-direction:column; gap:2rem;">
                  <div style="background:#1a1a1a; border-radius:10px; padding:1.5rem; border:1px solid #333;">
+                    <h3 style="margin-bottom:1.2rem; color:#ddd;">User Visits Over Time</h3>
+                    <div style="height:400px; position:relative;">
+                        <canvas id="chart-visits-time"></canvas>
+                    </div>
+                </div>
+                 <div style="background:#1a1a1a; border-radius:10px; padding:1.5rem; border:1px solid #333;">
                     <h3 style="margin-bottom:1.2rem; color:#ddd;">Downloads Over Time</h3>
                     <div style="height:400px; position:relative;">
                         <canvas id="chart-downloads-time"></canvas>
@@ -317,7 +361,7 @@ if (!isAdmin()) {
                 </div>
             </div>
 
-            <!-- Resources by Category Chart -->
+            <!-- Resources by Category -->
             <div style="margin-top: 2rem; background:#1a1a1a; border-radius:10px; padding:1.5rem; border:1px solid #333;">
                 <h3 style="margin-bottom:1.2rem; color:#ddd;">Resources by Category</h3>
                 <div style="height:450px; position:relative;">
@@ -345,39 +389,51 @@ if (!isAdmin()) {
         
         <!-- Feedbacks Tab -->
         <div id="feedbacks-section" class="admin-card fade-in tab-content" style="display:none;">
-            <h2>User Feedbacks & Suggestions</h2>
-            <div style="overflow-x:auto;">
-                <table class="data-table" id="feedback-table">
-                    <thead>
-                        <tr>
-                            <th>User Name</th>
-                            <th>School/Office</th>
-                            <th>Date Submitted</th>
-                            <th>Suggestion</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <!-- Dynamic rows -->
-                    </tbody>
-                </table>
+            <h2>Feedback Center</h2>
+            <div style="display:flex; gap:10px; margin:1rem 0 1.5rem; flex-wrap:wrap;">
+                <button class="btn btn-primary feedback-tab-btn" data-target="feedback-suggestions-panel" type="button">Suggestions</button>
+                <button class="btn btn-secondary feedback-tab-btn" data-target="feedback-comments-panel" type="button">Comments / Error Reports</button>
             </div>
 
-            <h2 style="margin-top:40px;">LR Comments / Error Reports</h2>
-            <div style="overflow-x:auto; margin-top: 1rem;">
-                <table class="data-table" id="lr-comments-table">
-                    <thead>
-                        <tr>
-                            <th>User Name</th>
-                            <th>School/Office</th>
-                            <th>Resource Title</th>
-                            <th>Date Submitted</th>
-                            <th>Comment / Error</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <!-- Dynamic rows -->
-                    </tbody>
-                </table>
+            <div id="feedback-suggestions-panel">
+                <h3>User Feedbacks & Suggestions</h3>
+                <div style="overflow-x:auto;">
+                    <table class="data-table" id="feedback-table">
+                        <thead>
+                            <tr>
+                                <th>User Name</th>
+                                <th>School/Office</th>
+                                <th>Date Submitted</th>
+                                <th>Suggestion</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Dynamic rows -->
+                        </tbody>
+                    </table>
+                </div>
+                <div id="feedback-pagination" style="display:flex; justify-content:flex-end; gap:8px; margin-top:1rem; align-items:center;"></div>
+            </div>
+
+            <div id="feedback-comments-panel" style="display:none;">
+                <h3 style="margin-top:40px;">LR Comments / Error Reports</h3>
+                <div style="overflow-x:auto; margin-top: 1rem;">
+                    <table class="data-table" id="lr-comments-table">
+                        <thead>
+                            <tr>
+                                <th>User Name</th>
+                                <th>School/Office</th>
+                                <th>Resource Title</th>
+                                <th>Date Submitted</th>
+                                <th>Comment / Error</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Dynamic rows -->
+                        </tbody>
+                    </table>
+                </div>
+                <div id="comments-pagination" style="display:flex; justify-content:flex-end; gap:8px; margin-top:1rem; align-items:center;"></div>
             </div>
         </div>
 

@@ -824,8 +824,13 @@
             <!-- Canvas area -->
             <div id="pdf-viewer-container" onclick="event.stopPropagation();"
                 style="flex:1; overflow-y:auto; overflow-x:auto; display:flex; justify-content:center; align-items:flex-start; padding:24px 16px; background:#3a3a3a;">
-                <canvas id="pdf-render-canvas"
-                    style="box-shadow:0 8px 40px rgba(0,0,0,0.9); background:white; max-width:100%; height:auto;"></canvas>
+                <div id="pdf-spread"
+                    style="display:flex; gap:20px; align-items:flex-start; justify-content:center;">
+                    <canvas id="pdf-render-canvas-left"
+                        style="box-shadow:0 8px 40px rgba(0,0,0,0.9); background:white; max-width:100%; height:auto;"></canvas>
+                    <canvas id="pdf-render-canvas-right"
+                        style="box-shadow:0 8px 40px rgba(0,0,0,0.9); background:white; max-width:100%; height:auto;"></canvas>
+                </div>
             </div>
         </div>
     </div>

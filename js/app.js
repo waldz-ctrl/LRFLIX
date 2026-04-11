@@ -3,6 +3,10 @@ document.addEventListener('DOMContentLoaded', () => {
     let isRegistering = false;
     let currentResource = null;
 
+    fetch('api/analytics.php?action=track_visit', {
+        method: 'POST'
+    }).catch(() => {});
+
     // Elements
     const authView = document.getElementById('auth-view');
     const appView = document.getElementById('app-view');
@@ -1002,31 +1006,53 @@ document.addEventListener('DOMContentLoaded', () => {
     const PDF_SCALE_MIN = 0.5;
     const PDF_SCALE_MAX = 4.0;
     const PDF_SCALE_STEP = 0.25;
-    const pdfRenderCanvas = document.getElementById('pdf-render-canvas');
-    const pdfCtx = pdfRenderCanvas ? pdfRenderCanvas.getContext('2d') : null;
+    const pdfRenderCanvasLeft = document.getElementById('pdf-render-canvas-left');
+    const pdfRenderCanvasRight = document.getElementById('pdf-render-canvas-right');
+    const pdfCtxLeft = pdfRenderCanvasLeft ? pdfRenderCanvasLeft.getContext('2d') : null;
+    const pdfCtxRight = pdfRenderCanvasRight ? pdfRenderCanvasRight.getContext('2d') : null;
 
     function updateZoomLabel() {
         const el = document.getElementById('pdf-zoom-level');
         if (el) el.textContent = Math.round(customPdfScale / 1.5 * 100) + '%';
     }
 
-    function renderPdfPageAsViewer(num) {
+    async function renderPdfPageAsViewer(num) {
         if (!customPdfDoc) return;
         customPdfRendering = true;
-        customPdfDoc.getPage(num).then(page => {
-            const viewport = page.getViewport({ scale: customPdfScale });
-            pdfRenderCanvas.height = viewport.height;
-            pdfRenderCanvas.width = viewport.width;
-            const renderContext = { canvasContext: pdfCtx, viewport: viewport };
-            page.render(renderContext).promise.then(() => {
-                customPdfRendering = false;
-                if (customPdfPagePending !== null) {
-                    renderPdfPageAsViewer(customPdfPagePending);
-                    customPdfPagePending = null;
-                }
-            });
-        });
-        document.getElementById('pdf-current-page').textContent = num;
+
+        try {
+            const leftPage = await customPdfDoc.getPage(num);
+            const leftViewport = leftPage.getViewport({ scale: customPdfScale });
+            pdfRenderCanvasLeft.height = leftViewport.height;
+            pdfRenderCanvasLeft.width = leftViewport.width;
+            pdfRenderCanvasLeft.style.display = 'block';
+            await leftPage.render({ canvasContext: pdfCtxLeft, viewport: leftViewport }).promise;
+
+            const rightPageNumber = num + 1;
+            if (rightPageNumber <= customPdfDoc.numPages) {
+                const rightPage = await customPdfDoc.getPage(rightPageNumber);
+                const rightViewport = rightPage.getViewport({ scale: customPdfScale });
+                pdfRenderCanvasRight.height = rightViewport.height;
+                pdfRenderCanvasRight.width = rightViewport.width;
+                pdfRenderCanvasRight.style.display = 'block';
+                await rightPage.render({ canvasContext: pdfCtxRight, viewport: rightViewport }).promise;
+            } else {
+                pdfCtxRight.clearRect(0, 0, pdfRenderCanvasRight.width, pdfRenderCanvasRight.height);
+                pdfRenderCanvasRight.width = leftViewport.width;
+                pdfRenderCanvasRight.height = leftViewport.height;
+                pdfRenderCanvasRight.style.display = 'none';
+            }
+        } finally {
+            customPdfRendering = false;
+            if (customPdfPagePending !== null) {
+                const nextPendingPage = customPdfPagePending;
+                customPdfPagePending = null;
+                renderPdfPageAsViewer(nextPendingPage);
+            }
+        }
+
+        const rightPageNumber = Math.min(num + 1, customPdfDoc.numPages);
+        document.getElementById('pdf-current-page').textContent = num === rightPageNumber ? `${num}` : `${num}-${rightPageNumber}`;
         updateZoomLabel();
     }
 
@@ -1063,9 +1089,9 @@ document.addEventListener('DOMContentLoaded', () => {
             e.stopPropagation();
             if (!customPdfDoc) return;
             customPdfDoc.getPage(customPdfPageNum).then(page => {
-                const containerWidth = document.getElementById('pdf-viewer-container').clientWidth - 40;
+                const containerWidth = document.getElementById('pdf-viewer-container').clientWidth - 60;
                 const viewport = page.getViewport({ scale: 1 });
-                customPdfScale = containerWidth / viewport.width;
+                customPdfScale = (containerWidth - 20) / (viewport.width * 2);
                 queueRenderPdfPage(customPdfPageNum);
             });
         });
@@ -1090,15 +1116,15 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('pdf-prev-page').addEventListener('click', (e) => {
         e.stopPropagation();
         if (customPdfPageNum <= 1) return;
-        customPdfPageNum--;
+        customPdfPageNum = Math.max(1, customPdfPageNum - 2);
         queueRenderPdfPage(customPdfPageNum);
     });
 
 
     document.getElementById('pdf-next-page').addEventListener('click', (e) => {
         e.stopPropagation();
-        if (!customPdfDoc || customPdfPageNum >= customPdfDoc.numPages) return;
-        customPdfPageNum++;
+        if (!customPdfDoc || customPdfPageNum + 1 >= customPdfDoc.numPages) return;
+        customPdfPageNum += 2;
         queueRenderPdfPage(customPdfPageNum);
     });
 
@@ -1252,4 +1278,3 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 });
-

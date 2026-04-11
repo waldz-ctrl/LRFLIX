@@ -1,5 +1,6 @@
 RewriteEngine On
-RewriteCond %{THE_REQUEST} ^[A-Z]{3,}\s(.*)/index\.html [NC]
-RewriteRule ^(.*)index\.html$ /$1 [R=301,L]
 
 DirectoryIndex index.html
+
+# Clean admin URL: /lrflix/admin/ -> management-hub.php
+RewriteRule ^admin/?$ management-hub.php [L,QSA]

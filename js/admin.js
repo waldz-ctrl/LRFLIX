@@ -1,4 +1,43 @@
-document.addEventListener('DOMContentLoaded', () => {
+﻿document.addEventListener('DOMContentLoaded', () => {
+    let reportAssetsPromise = null;
+
+    function arrayBufferToBase64(buffer) {
+        let binary = '';
+        const bytes = new Uint8Array(buffer);
+        const chunkSize = 0x8000;
+        for (let i = 0; i < bytes.length; i += chunkSize) {
+            const chunk = bytes.subarray(i, i + chunkSize);
+            binary += String.fromCharCode.apply(null, chunk);
+        }
+        return btoa(binary);
+    }
+
+    function blobToDataUrl(blob) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+        });
+    }
+
+    async function loadReportAssets() {
+        if (reportAssetsPromise) return reportAssetsPromise;
+
+        reportAssetsPromise = Promise.all([
+            fetch('/lrflix/fonts/old-english-five.ttf', { cache: 'no-store' }).then(async (res) => {
+                if (!res.ok) throw new Error('Failed to load Old English font.');
+                return arrayBufferToBase64(await res.arrayBuffer());
+            }),
+            fetch('/lrflix/src/depedlogo.png', { cache: 'no-store' }).then(async (res) => {
+                if (!res.ok) throw new Error('Failed to load DepEd logo.');
+                return blobToDataUrl(await res.blob());
+            })
+        ]).then(([fontBase64, logoDataUrl]) => ({ fontBase64, logoDataUrl }));
+
+        return reportAssetsPromise;
+    }
+
     // Check Auth initially
     fetch('api/auth.php?action=check')
         .then(res => res.json())
@@ -171,6 +210,12 @@ document.addEventListener('DOMContentLoaded', () => {
     closeActionModal.addEventListener('click', () => {
         actionModal.classList.add('hidden');
         actionModal.classList.remove('active');
+        actionModal.style.removeProperty('display');
+        actionModal.style.removeProperty('opacity');
+        actionModal.style.removeProperty('visibility');
+        actionModal.style.removeProperty('pointer-events');
+        actionModal.style.removeProperty('z-index');
+        switchTab('upload-section');
     });
 
     uploadForm.addEventListener('submit', (e) => {
@@ -255,303 +300,331 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Chart instances (to destroy before redraw)
+    let chartVisits = null;
     let chartTime = null;
     let chartCat = null;
     let chartResCat = null;
-    let currentPeriod = 'day';
+    const analyticsFilters = {
+        visits: { period: 'day', date: '' },
+        downloadsTime: { period: 'day', date: '' },
+        downloadsCategory: { period: 'day', date: '' }
+    };
+    const usersState = { page: 1, perPage: 10, search: '', school: '', position: '' };
+    const resourcesState = { page: 1, perPage: 10, search: '', sortDownloads: 'desc' };
+    const feedbackState = { page: 1, perPage: 10 };
+    const commentsState = { page: 1, perPage: 10 };
+    let allUsers = [];
+    let allFeedbacks = [];
+    let allComments = [];
 
-    let customDate = null;
-
-    // Period filter buttons
-    document.querySelectorAll('.period-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            document.querySelectorAll('.period-btn').forEach(b => {
-                b.classList.remove('btn-primary');
-                b.classList.add('btn-secondary');
-            });
-            e.currentTarget.classList.remove('btn-secondary');
-            e.currentTarget.classList.add('btn-primary');
-            currentPeriod = e.currentTarget.dataset.period;
-            customDate = null;
-            document.getElementById('custom-date-filter').value = '';
-            loadAnalytics();
+    const legacyDateInput = document.getElementById('custom-date-filter');
+    const legacyFilterBar = legacyDateInput ? legacyDateInput.parentElement : null;
+    if (legacyFilterBar) {
+        Array.from(legacyFilterBar.children).forEach((child, index, arr) => {
+            if (index !== arr.length - 1) child.style.display = 'none';
         });
-    });
+        legacyFilterBar.style.justifyContent = 'flex-end';
+    }
 
-    document.getElementById('custom-date-filter').addEventListener('change', (e) => {
-        if (!e.target.value) return;
-        document.querySelectorAll('.period-btn').forEach(b => {
-            b.classList.remove('btn-primary');
-            b.classList.add('btn-secondary');
-        });
-        currentPeriod = 'day';
-        customDate = e.target.value;
-        loadAnalytics();
-    });
+    function injectAnalyticsToolbar(title, chartKey, dateId) {
+        const heading = Array.from(document.querySelectorAll('#analytics-section h3')).find(el => el.textContent.trim() === title);
+        if (!heading || heading.dataset.toolbarReady === 'true') return;
+        heading.dataset.toolbarReady = 'true';
+        const wrapper = document.createElement('div');
+        wrapper.style.cssText = 'display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:1.2rem;';
+        heading.parentNode.insertBefore(wrapper, heading);
+        heading.style.margin = '0';
+        wrapper.appendChild(heading);
 
-    // Register ChartDataLabels plugin globally
+        const controls = document.createElement('div');
+        controls.style.cssText = 'display:flex; gap:8px; flex-wrap:wrap; align-items:center;';
+        controls.innerHTML = `
+            <button class=\"btn btn-primary analytics-filter-btn\" data-chart=\"${chartKey}\" data-period=\"day\">Today</button>
+            <button class=\"btn btn-secondary analytics-filter-btn\" data-chart=\"${chartKey}\" data-period=\"week\">This Week</button>
+            <button class=\"btn btn-secondary analytics-filter-btn\" data-chart=\"${chartKey}\" data-period=\"month\">This Month</button>
+            <button class=\"btn btn-secondary analytics-filter-btn\" data-chart=\"${chartKey}\" data-period=\"year\">This Year</button>
+            <input type=\"date\" id=\"${dateId}\" style=\"padding:0 0.6rem; border-radius:4px; background:#333; color:white; border:1px solid #444; outline:none; height:42px; cursor:pointer;\">\n`;
+        wrapper.appendChild(controls);
+    }
+
+    injectAnalyticsToolbar('User Visits Over Time', 'visits', 'visits-date-filter');
+    injectAnalyticsToolbar('Downloads Over Time', 'downloadsTime', 'downloads-time-date-filter');
+    injectAnalyticsToolbar('Downloads by Category', 'downloadsCategory', 'downloads-category-date-filter');
+
     if (typeof ChartDataLabels !== 'undefined') {
         Chart.register(ChartDataLabels);
     }
 
-
-    function loadAnalytics() {
-        let url = `api/analytics.php?period=${currentPeriod}`;
-        if (customDate) url += `&date=${customDate}`;
-        fetch(url)
-            .then(r => r.json())
-            .then(data => {
-                if (!data.success) return;
-
-                // Update summary stats
-                document.getElementById('stat-users').textContent = data.totals.users;
-                document.getElementById('stat-resources').textContent = data.totals.resources;
-                document.getElementById('stat-downloads').textContent = data.totals.downloads;
-                document.getElementById('stat-likes').textContent = data.totals.likes;
-
-                // Chart: Downloads over time
-                const timeLabels = data.time_data.map(d => d.period_label);
-                const timeValues = data.time_data.map(d => parseInt(d.total));
-
-                if (chartTime) chartTime.destroy();
-                const ctxTime = document.getElementById('chart-downloads-time').getContext('2d');
-                
-                // Create a gradient for the line chart
-                const gradient = ctxTime.createLinearGradient(0, 0, 0, 400);
-                gradient.addColorStop(0, 'rgba(229, 9, 20, 0.4)');
-                gradient.addColorStop(1, 'rgba(229, 9, 20, 0)');
-
-                chartTime = new Chart(ctxTime, {
-                    type: 'line',
-                    data: {
-                        labels: timeLabels,
-                        datasets: [{
-                            label: 'Downloads',
-                            data: timeValues,
-                            backgroundColor: gradient,
-                            borderColor: '#e50914',
-                            borderWidth: 3,
-                            fill: true,
-                            tension: 0.4, // smooth curve
-                            pointBackgroundColor: '#e50914',
-                            pointBorderColor: '#fff',
-                            pointHoverRadius: 6
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: { 
-                            legend: { display: false },
-                            tooltip: { 
-                                backgroundColor: '#1a1a1a',
-                                titleColor: '#fff',
-                                bodyColor: '#fff',
-                                borderColor: '#333',
-                                borderWidth: 1
-                            }
-                        },
-                        scales: {
-                            x: { 
-                                ticks: { color: '#aaa', font: { size: 11 } }, 
-                                grid: { color: 'rgba(255,255,255,0.05)' } 
-                            },
-                            y: { 
-                                ticks: { color: '#aaa', stepSize: 1, font: { size: 11 } }, 
-                                grid: { color: 'rgba(255,255,255,0.05)' }, 
-                                beginAtZero: true 
-                            }
-                        }
-                    }
-                });
-
-                // Chart: Downloads by category (donut)
-                const catLabels = data.category_data.map(d => d.category || 'Uncategorized');
-                const catValues = data.category_data.map(d => parseInt(d.total));
-                const palette = ['#e50914','#3498db','#2ecc71','#f39c12','#9b59b6','#1abc9c','#e67e22','#e74c3c','#34495e','#16a085'];
-
-                if (chartCat) chartCat.destroy();
-                const ctxCat = document.getElementById('chart-downloads-category').getContext('2d');
-                chartCat = new Chart(ctxCat, {
-                    type: 'bar', // vertical bar chart
-                    data: {
-                        labels: catLabels,
-                        datasets: [{
-                            label: 'Downloads per Category',
-                            data: catValues,
-                            backgroundColor: palette.slice(0, catLabels.length),
-                            borderRadius: 6,
-                            borderWidth: 0,
-                            barThickness: 40
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: {
-                            legend: { display: false },
-                            datalabels: {
-                                anchor: 'end',
-                                align: 'top',
-                                color: '#fff',
-                                font: { weight: 'bold', size: 12 },
-                                formatter: (val) => val > 0 ? val : ''
-                            }
-                        },
-                        scales: {
-                            x: { 
-                                ticks: { color: '#aaa', font: { size: 11 } },
-                                grid: { display: false }
-                            },
-                            y: { 
-                                ticks: { color: '#aaa', stepSize: 1 },
-                                grid: { color: 'rgba(255,255,255,0.05)' },
-                                beginAtZero: true,
-                                // Add extra space at top for labels
-                                grace: '10%'
-                            }
-                        }
-                    }
-                });
-                // Chart: Resources by Category
-                const resCatLabels = data.resources_per_category.map(d => d.category || 'Uncategorized');
-                const resCatValues = data.resources_per_category.map(d => parseInt(d.total));
-
-                if (chartResCat) chartResCat.destroy();
-                const ctxResCat = document.getElementById('chart-resources-category').getContext('2d');
-                chartResCat = new Chart(ctxResCat, {
-                    type: 'bar',
-                    data: {
-                        labels: resCatLabels,
-                        datasets: [{
-                            label: 'Resources',
-                            data: resCatValues,
-                            backgroundColor: palette.slice(0, resCatLabels.length),
-                            borderRadius: 6,
-                            borderWidth: 0,
-                            barThickness: 40
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: {
-                            legend: { display: false },
-                            datalabels: {
-                                anchor: 'end',
-                                align: 'top',
-                                color: '#fff',
-                                font: { weight: 'bold', size: 12 },
-                                formatter: (val) => val > 0 ? val : ''
-                            }
-                        },
-                        scales: {
-                            x: { 
-                                ticks: { color: '#aaa', font: { size: 11 } },
-                                grid: { display: false }
-                            },
-                            y: { 
-                                ticks: { color: '#aaa', stepSize: 1 },
-                                grid: { color: 'rgba(255,255,255,0.05)' },
-                                beginAtZero: true,
-                                grace: '10%'
-                            }
-                        }
-                    }
-                });
-
-                // Top resources table
-                const tbody = document.querySelector('#top-resources-table tbody');
-                tbody.innerHTML = '';
-                data.top_resources.forEach((r, i) => {
-                    const tr = document.createElement('tr');
-                    tr.innerHTML = `
-                        <td>${i+1}. ${r.title}</td>
-                        <td><span style="background:#333; padding:2px 6px; border-radius:4px; font-size:0.8rem;">${r.category || '–'}</span></td>
-                        <td><strong style="color:#2ecc71;">${r.downloads_count}</strong></td>
-                        <td><strong style="color:#e50914;">${r.likes_count}</strong></td>
-                    `;
-                    tbody.appendChild(tr);
-                });
-
-                if (data.top_resources.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="4" style="color:#aaa; text-align:center;">No data yet.</td></tr>';
-                }
-            })
-            .catch(err => console.error('Analytics load error:', err));
+    function buildAnalyticsUrl(filter) {
+        let url = `api/analytics.php?period=${filter.period}`;
+        if (filter.date) url += `&date=${filter.date}`;
+        return url;
     }
 
+    function setActiveChartButtons(chartKey) {
+        document.querySelectorAll(`.analytics-filter-btn[data-chart="${chartKey}"]`).forEach(btn => {
+            const isActive = btn.dataset.period === analyticsFilters[chartKey].period;
+            btn.classList.toggle('btn-primary', isActive);
+            btn.classList.toggle('btn-secondary', !isActive);
+        });
+    }
 
-    let allUsers = [];
+    function renderPagination(containerId, currentPage, totalItems, perPage, onPageChange) {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+        container.innerHTML = '';
+        const totalPages = Math.max(1, Math.ceil(totalItems / perPage));
+        if (totalPages <= 1) return;
+        const info = document.createElement('span');
+        info.style.color = '#aaa';
+        info.style.marginRight = '8px';
+        info.textContent = `Page ${currentPage} of ${totalPages}`;
+        const prevBtn = document.createElement('button');
+        prevBtn.className = 'btn btn-secondary';
+        prevBtn.textContent = 'Prev';
+        prevBtn.disabled = currentPage === 1;
+        prevBtn.onclick = () => onPageChange(currentPage - 1);
+        const nextBtn = document.createElement('button');
+        nextBtn.className = 'btn btn-secondary';
+        nextBtn.textContent = 'Next';
+        nextBtn.disabled = currentPage === totalPages;
+        nextBtn.onclick = () => onPageChange(currentPage + 1);
+        container.append(info, prevBtn, nextBtn);
+    }
+
+    function renderLineChart(setter, canvasId, labels, values, color, label) {
+        if (setter.get()) setter.get().destroy();
+        const ctx = document.getElementById(canvasId).getContext('2d');
+        const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+        const rgb = color === '#9b59b6' ? '155, 89, 182' : '229, 9, 20';
+        gradient.addColorStop(0, `rgba(${rgb}, 0.35)`);
+        gradient.addColorStop(1, `rgba(${rgb}, 0)`);
+        setter.set(new Chart(ctx, {
+            type: 'line',
+            data: { labels, datasets: [{ label, data: values, backgroundColor: gradient, borderColor: color, borderWidth: 3, fill: true, tension: 0.35, pointBackgroundColor: color, pointBorderColor: '#fff', pointHoverRadius: 6 }] },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false }, tooltip: { backgroundColor: '#1a1a1a', titleColor: '#fff', bodyColor: '#fff', borderColor: '#333', borderWidth: 1 } },
+                scales: {
+                    x: { ticks: { color: '#aaa', font: { size: 11 } }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                    y: { ticks: { color: '#aaa', stepSize: 1, font: { size: 11 } }, grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true }
+                }
+            }
+        }));
+    }
+
+    function renderBarChart(setter, canvasId, labels, values, palette, datasetLabel) {
+        if (setter.get()) setter.get().destroy();
+        const ctx = document.getElementById(canvasId).getContext('2d');
+        setter.set(new Chart(ctx, {
+            type: 'bar',
+            data: { labels, datasets: [{ label: datasetLabel, data: values, backgroundColor: palette.slice(0, labels.length), borderRadius: 6, borderWidth: 0, barThickness: 40 }] },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false }, datalabels: { anchor: 'end', align: 'top', color: '#fff', font: { weight: 'bold', size: 12 }, formatter: (val) => val > 0 ? val : '' } },
+                scales: {
+                    x: { ticks: { color: '#aaa', font: { size: 11 } }, grid: { display: false } },
+                    y: { ticks: { color: '#aaa', stepSize: 1 }, grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true, grace: '10%' }
+                }
+            }
+        }));
+    }
+
+    function loadAnalytics() {
+        Promise.all([
+            fetch(buildAnalyticsUrl(analyticsFilters.visits)).then(r => r.json()),
+            fetch(buildAnalyticsUrl(analyticsFilters.downloadsTime)).then(r => r.json()),
+            fetch(buildAnalyticsUrl(analyticsFilters.downloadsCategory)).then(r => r.json()),
+            fetch('api/analytics.php?period=day').then(r => r.json())
+        ]).then(([visitsData, downloadsTimeData, downloadsCategoryData, summaryData]) => {
+            if (!summaryData.success) return;
+            document.getElementById('stat-users').textContent = summaryData.totals.users;
+            document.getElementById('stat-resources').textContent = summaryData.totals.resources;
+            document.getElementById('stat-downloads').textContent = summaryData.totals.downloads;
+            document.getElementById('stat-likes').textContent = summaryData.totals.likes;
+            document.getElementById('stat-visits').textContent = summaryData.totals.visits;
+            const palette = ['#e50914','#3498db','#2ecc71','#f39c12','#9b59b6','#1abc9c','#e67e22','#e74c3c','#34495e','#16a085'];
+            renderLineChart({ get: () => chartVisits, set: (v) => chartVisits = v }, 'chart-visits-time', visitsData.visit_time_data.map(d => d.period_label), visitsData.visit_time_data.map(d => parseInt(d.total)), '#9b59b6', 'Visits');
+            renderLineChart({ get: () => chartTime, set: (v) => chartTime = v }, 'chart-downloads-time', downloadsTimeData.time_data.map(d => d.period_label), downloadsTimeData.time_data.map(d => parseInt(d.total)), '#e50914', 'Downloads');
+            renderBarChart({ get: () => chartCat, set: (v) => chartCat = v }, 'chart-downloads-category', downloadsCategoryData.category_data.map(d => d.category || 'Uncategorized'), downloadsCategoryData.category_data.map(d => parseInt(d.total)), palette, 'Downloads per Category');
+            renderBarChart({ get: () => chartResCat, set: (v) => chartResCat = v }, 'chart-resources-category', summaryData.resources_per_category.map(d => d.category || 'Uncategorized'), summaryData.resources_per_category.map(d => parseInt(d.total)), palette, 'Resources');
+            const tbody = document.querySelector('#top-resources-table tbody');
+            tbody.innerHTML = '';
+            summaryData.top_resources.forEach((r, i) => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${i+1}. ${r.title}</td>
+                    <td><span style="background:#333; padding:2px 6px; border-radius:4px; font-size:0.8rem;">${r.category || '–'}</span></td>
+                    <td><strong style="color:#2ecc71;">${r.downloads_count}</strong></td>
+                    <td><strong style="color:#e50914;">${r.likes_count}</strong></td>
+                `;
+                tbody.appendChild(tr);
+            });
+            if (summaryData.top_resources.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" style="color:#aaa; text-align:center;">No data yet.</td></tr>';
+            }
+        }).catch(err => console.error('Analytics load error:', err));
+    }
+
+    document.querySelectorAll('.analytics-filter-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const chartKey = e.currentTarget.dataset.chart;
+            analyticsFilters[chartKey].period = e.currentTarget.dataset.period;
+            analyticsFilters[chartKey].date = '';
+            const dateMap = { visits: 'visits-date-filter', downloadsTime: 'downloads-time-date-filter', downloadsCategory: 'downloads-category-date-filter' };
+            const dateEl = document.getElementById(dateMap[chartKey]);
+            if (dateEl) dateEl.value = '';
+            setActiveChartButtons(chartKey);
+            loadAnalytics();
+        });
+    });
+
+    [['visits', 'visits-date-filter'], ['downloadsTime', 'downloads-time-date-filter'], ['downloadsCategory', 'downloads-category-date-filter']].forEach(([chartKey, inputId]) => {
+        const input = document.getElementById(inputId);
+        if (!input) return;
+        setActiveChartButtons(chartKey);
+        input.addEventListener('change', (e) => {
+            analyticsFilters[chartKey].period = 'day';
+            analyticsFilters[chartKey].date = e.target.value || '';
+            setActiveChartButtons(chartKey);
+            loadAnalytics();
+        });
+    });
+
+    function populateUserFilters(users) {
+        const schoolSelect = document.getElementById('users-filter-school');
+        const positionSelect = document.getElementById('users-filter-position');
+        if (!schoolSelect || !positionSelect) return;
+        const schools = [...new Set(users.map(u => u.school).filter(Boolean))].sort();
+        const positions = [...new Set(users.map(u => u.position).filter(Boolean))].sort();
+        schoolSelect.innerHTML = '<option value="">All Schools/Offices</option>' + schools.map(v => `<option value="${v}">${v}</option>`).join('');
+        positionSelect.innerHTML = '<option value="">All Positions</option>' + positions.map(v => `<option value="${v}">${v}</option>`).join('');
+        schoolSelect.value = usersState.school;
+        positionSelect.value = usersState.position;
+    }
+
+    function renderUsersTable() {
+        const tbody = document.querySelector('#users-table tbody');
+        tbody.innerHTML = '';
+        const filtered = allUsers.filter(u => {
+            const usernameMatch = !usersState.search || (u.username || '').toLowerCase().includes(usersState.search);
+            const schoolMatch = !usersState.school || u.school === usersState.school;
+            const positionMatch = !usersState.position || u.position === usersState.position;
+            return usernameMatch && schoolMatch && positionMatch;
+        });
+        const start = (usersState.page - 1) * usersState.perPage;
+        const pageItems = filtered.slice(start, start + usersState.perPage);
+        pageItems.forEach(u => {
+            const tr = document.createElement('tr');
+            let name = '-';
+            if(u.last_name || u.first_name) {
+                name = `${u.last_name || ''}, ${u.first_name || ''} ${u.middle_name ? (u.middle_name.charAt(0)+'.') : ''}`;
+            }
+            tr.innerHTML = `
+                <td>${u.username}</td>
+                <td>${name}</td>
+                <td>${u.school || '-'}</td>
+                <td>${u.position || '-'}</td>
+                <td><span style="color:#9b59b6; font-weight:bold;">${u.visits_count || 0}</span></td>
+                <td><span style="color:#2ecc71; font-weight:bold;">${u.downloads_count || 0}</span></td>
+                <td style="font-size:0.85rem; color:#aaa;">${u.last_login || 'Never'}</td>
+                <td>${u.role !== 'admin' ? `<button class="btn btn-secondary" onclick="event.stopPropagation(); deleteUser(${u.id})" style="padding: 4px 8px;"><i class="fas fa-trash"></i></button>` : ''}</td>
+            `;
+            tr.style.cursor = 'pointer';
+            tr.onclick = (e) => {
+                if (e.target.tagName !== 'BUTTON' && e.target.tagName !== 'I') showUserInfo(u.id);
+            };
+            tbody.appendChild(tr);
+        });
+        if (pageItems.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color:#aaa;">No users found.</td></tr>';
+        }
+        renderPagination('users-pagination', usersState.page, filtered.length, usersState.perPage, (page) => {
+            usersState.page = page;
+            renderUsersTable();
+        });
+    }
 
     function loadUsers() {
         fetch('api/users.php?action=list')
             .then(res => res.json())
             .then(data => {
-                const tbody = document.querySelector('#users-table tbody');
-                tbody.innerHTML = '';
                 if(data.success && data.users) {
                     allUsers = data.users;
-                    data.users.forEach(u => {
-                        const tr = document.createElement('tr');
-                        
-                        let name = "-";
-                        if(u.last_name || u.first_name) {
-                            name = `${u.last_name || ''}, ${u.first_name || ''} ${u.middle_name ? (u.middle_name.charAt(0)+'.') : ''}`;
-                        }
-
-                        tr.innerHTML = `
-                            <td>${u.username}</td>
-                            <td>${name}</td>
-                            <td>${u.school || '-'}</td>
-                            <td>${u.position || '-'}</td>
-                            <td><span style="color:#2ecc71; font-weight:bold;">${u.downloads_count || 0}</span></td>
-                            <td style="font-size:0.85rem; color:#aaa;">${u.last_login || 'Never'}</td>
-                            <td>
-                                ${u.role !== 'admin' ? 
-                                `<button class="btn btn-secondary" onclick="event.stopPropagation(); deleteUser(${u.id})" style="padding: 4px 8px;"><i class="fas fa-trash"></i></button>` 
-                                : ''}
-                            </td>
-                        `;
-                        tr.style.cursor = 'pointer';
-                        tr.onclick = (e) => {
-                            if (e.target.tagName !== 'BUTTON' && e.target.tagName !== 'I') {
-                                showUserInfo(u.id);
-                            }
-                        };
-                        tbody.appendChild(tr);
-                    });
+                    populateUserFilters(allUsers);
+                    renderUsersTable();
                 }
             });
+    }
+
+    document.getElementById('users-search')?.addEventListener('input', (e) => {
+        usersState.search = e.target.value.trim().toLowerCase();
+        usersState.page = 1;
+        renderUsersTable();
+    });
+    document.getElementById('users-filter-school')?.addEventListener('change', (e) => {
+        usersState.school = e.target.value;
+        usersState.page = 1;
+        renderUsersTable();
+    });
+    document.getElementById('users-filter-position')?.addEventListener('change', (e) => {
+        usersState.position = e.target.value;
+        usersState.page = 1;
+        renderUsersTable();
+    });
+
+    function renderResourcesTable() {
+        const tbody = document.querySelector('#resources-table tbody');
+        tbody.innerHTML = '';
+        const filtered = allResources.filter(r => !resourcesState.search || (r.title || '').toLowerCase().includes(resourcesState.search)).sort((a, b) => resourcesState.sortDownloads === 'desc' ? (parseInt(b.downloads_count || 0) - parseInt(a.downloads_count || 0)) : (parseInt(a.downloads_count || 0) - parseInt(b.downloads_count || 0)));
+        const start = (resourcesState.page - 1) * resourcesState.perPage;
+        const pageItems = filtered.slice(start, start + resourcesState.perPage);
+        pageItems.forEach(r => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${r.title}</td>
+                <td>${r.competencies || 'N/A'}</td>
+                <td>${r.downloads_count}</td>
+                <td>${r.likes_count}</td>
+                <td>
+                    <button class="btn btn-primary" onclick="editResource(${r.id})" style="margin-right: 5px; padding: 5px 10px;"><i class="fas fa-edit"></i> Edit</button>
+                    <button class="btn btn-secondary" onclick="deleteResource(${r.id})" style="padding: 5px 10px;"><i class="fas fa-trash"></i></button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+        if (pageItems.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#aaa;">No resources found.</td></tr>';
+        }
+        renderPagination('resources-pagination', resourcesState.page, filtered.length, resourcesState.perPage, (page) => {
+            resourcesState.page = page;
+            renderResourcesTable();
+        });
     }
 
     function loadResources() {
         fetch('api/resources.php?action=list')
             .then(res => res.json())
             .then(data => {
-                const tbody = document.querySelector('#resources-table tbody');
-                tbody.innerHTML = '';
                 if(data.success && data.resources) {
-                    allResources = data.resources; // Store globally for editing
-                    data.resources.forEach(r => {
-                        const tr = document.createElement('tr');
-                        tr.innerHTML = `
-                            <td>${r.title}</td>
-                            <td>${r.competencies || 'N/A'}</td>
-                            <td>${r.downloads_count}</td>
-                            <td>${r.likes_count}</td>
-                            <td>
-                                <button class="btn btn-primary" onclick="editResource(${r.id})" style="margin-right: 5px; padding: 5px 10px;"><i class="fas fa-edit"></i> Edit</button>
-                                <button class="btn btn-secondary" onclick="deleteResource(${r.id})" style="padding: 5px 10px;"><i class="fas fa-trash"></i></button>
-                            </td>
-                        `;
-                        tbody.appendChild(tr);
-                    });
+                    allResources = data.resources;
+                    renderResourcesTable();
                 }
             });
     }
 
-    window.editResource = (id) => {
+    document.getElementById('resources-search')?.addEventListener('input', (e) => {
+        resourcesState.search = e.target.value.trim().toLowerCase();
+        resourcesState.page = 1;
+        renderResourcesTable();
+    });
+    document.getElementById('resources-sort-downloads')?.addEventListener('click', () => {
+        resourcesState.sortDownloads = resourcesState.sortDownloads === 'desc' ? 'asc' : 'desc';
+        document.getElementById('resources-sort-downloads').textContent = `Sort Downloads: ${resourcesState.sortDownloads === 'desc' ? 'High to Low' : 'Low to High'}`;
+        renderResourcesTable();
+    });    window.editResource = (id) => {
         const res = allResources.find(r => r.id == id);
         if(!res) {
             console.error('Resource not found for id:', id);
@@ -639,6 +712,8 @@ document.addEventListener('DOMContentLoaded', () => {
             <hr style="border-color:#333;">
             <div><strong style="color:#aaa;">Grade Level:</strong> <span style="color:white; float:right;">${u.grade_level || '-'}</span></div>
             <hr style="border-color:#333;">
+            <div><strong style="color:#aaa;">Visits:</strong> <span style="color:#9b59b6; font-weight:bold; float:right;">${u.visits_count || 0}</span></div>
+            <hr style="border-color:#333;">
             <div><strong style="color:#aaa;">Downloads:</strong> <span style="color:#2ecc71; font-weight:bold; float:right;">${u.downloads_count || 0}</span></div>
         `;
         document.getElementById('user-info-modal').classList.remove('hidden');
@@ -699,66 +774,119 @@ document.addEventListener('DOMContentLoaded', () => {
             });
     };
 
-    function generatePDFReport(resources, year, month) {
+    async function generatePDFReport(resources, year, month) {
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF('l', 'pt', 'a4');
-        
-        const logoUrl = 'https://cid-batanes.com/lrflix/src/depedlogo.png?v=' + Date.now();
-        const img = new Image();
-        img.crossOrigin = "Anonymous";
-        img.src = logoUrl;
-        
-        img.onload = () => {
-            doc.addImage(img, 'PNG', doc.internal.pageSize.getWidth()/2 - 25, 15, 50, 50); 
-            
-            // Grab high-contrast captures
-            let dlChartBase64 = getChartForReport(chartCat);
-            let resChartBase64 = getChartForReport(chartResCat);
 
-            finalizePDF(doc, resources, year, month, dlChartBase64, resChartBase64);
-        };
-        img.onerror = () => {
-            finalizePDF(doc, resources, year, month, null, null);
-        };
-        setTimeout(() => { if(!doc.pdfDone) finalizePDF(doc, resources, year, month, null, null); }, 2500);
+        try {
+            const assets = await loadReportAssets();
+            doc.addFileToVFS('old-english-five.ttf', assets.fontBase64);
+            doc.addFont('old-english-five.ttf', 'OldEnglishFive', 'normal');
+            doc.__lrflixLogo = assets.logoDataUrl;
+            doc.__oldEnglishReady = true;
+        } catch (err) {
+            console.error('Report asset load error:', err);
+            doc.__oldEnglishReady = false;
+            doc.__lrflixLogo = null;
+        }
+
+        // Grab high-contrast captures
+        const dlChartBase64 = getChartForReport(chartCat);
+        const resChartBase64 = getChartForReport(chartResCat);
+        finalizePDF(doc, resources, year, month, dlChartBase64, resChartBase64);
     }
 
     function getChartForReport(chartInstance) {
         if (!chartInstance) return null;
-        
-        // Save current dark-mode theme options
-        const originalOptions = JSON.parse(JSON.stringify(chartInstance.options));
-        
-        // Temporarily Apply High-Contrast Report Theme
-        chartInstance.options.scales.x.ticks.color = '#000000';
-        chartInstance.options.scales.x.grid = { display: true, color: '#eeeeee' };
-        chartInstance.options.scales.y.ticks.color = '#000000';
-        chartInstance.options.scales.y.grid = { display: true, color: '#eeeeee' };
-        if(chartInstance.options.plugins.datalabels) {
-            chartInstance.options.plugins.datalabels.color = '#000000';
-        }
-        chartInstance.update('none'); // Update without animation
 
-        const canvas = chartInstance.canvas;
-        const scale = 3;
         const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = canvas.width * scale;
-        tempCanvas.height = canvas.height * scale;
-        const ctx = tempCanvas.getContext('2d');
-        ctx.scale(scale, scale);
-        
-        // Fill pure white background
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        
-        // Draw the chart (now in high contrast)
-        ctx.drawImage(canvas, 0, 0);
-        
-        // Restore previous dark theme 
-        chartInstance.options = originalOptions;
-        chartInstance.update('none');
+        tempCanvas.width = 2400;
+        tempCanvas.height = 900;
+        const tempCtx = tempCanvas.getContext('2d');
 
-        return tempCanvas.toDataURL('image/png', 1.0);
+        tempCtx.fillStyle = '#ffffff';
+        tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+
+        const isLine = chartInstance.config.type === 'line';
+        const exportConfig = {
+            type: chartInstance.config.type,
+            data: {
+                labels: Array.isArray(chartInstance.data.labels) ? [...chartInstance.data.labels] : [],
+                datasets: (chartInstance.data.datasets || []).map(ds => ({
+                    label: ds.label,
+                    data: Array.isArray(ds.data) ? [...ds.data] : [],
+                    backgroundColor: ds.backgroundColor,
+                    borderColor: ds.borderColor,
+                    borderWidth: isLine ? 6 : 0,
+                    borderRadius: isLine ? 0 : 10,
+                    barThickness: isLine ? undefined : 72,
+                    fill: !!ds.fill,
+                    tension: ds.tension ?? 0,
+                    pointRadius: isLine ? 5 : 0,
+                    pointHoverRadius: isLine ? 5 : 0,
+                    pointBackgroundColor: ds.pointBackgroundColor || ds.borderColor,
+                    pointBorderColor: ds.pointBorderColor || '#ffffff'
+                }))
+            },
+            options: {
+                responsive: false,
+                animation: false,
+                devicePixelRatio: 4,
+                maintainAspectRatio: false,
+                layout: {
+                    padding: { top: 24, right: 24, bottom: 12, left: 24 }
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { enabled: false },
+                    datalabels: chartInstance.options.plugins?.datalabels ? {
+                        color: '#000000',
+                        anchor: 'end',
+                        align: 'top',
+                        offset: 6,
+                        font: { weight: 'bold', size: 20 },
+                        formatter: (val) => val > 0 ? val : ''
+                    } : false
+                },
+                scales: {
+                    x: {
+                        ticks: {
+                            color: '#000000',
+                            font: { size: 20, weight: '600' }
+                        },
+                        grid: { display: false },
+                        border: { color: '#cccccc' }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            color: '#000000',
+                            stepSize: 1,
+                            precision: 0,
+                            font: { size: 20, weight: '600' }
+                        },
+                        grid: { color: '#e3e3e3', lineWidth: 1.5 },
+                        border: { color: '#cccccc' }
+                    }
+                }
+            },
+            plugins: [{
+                id: 'pdfBackground',
+                beforeDraw(chart) {
+                    const { ctx, canvas } = chart;
+                    ctx.save();
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    ctx.restore();
+                }
+            }]
+        };
+
+        const exportChart = new Chart(tempCtx, exportConfig);
+        exportChart.update('none');
+        const dataUrl = tempCanvas.toDataURL('image/png', 1.0);
+        exportChart.destroy();
+        return dataUrl;
     }
 
     function finalizePDF(doc, resources, year, month, dlChart, resChart) {
@@ -766,58 +894,76 @@ document.addEventListener('DOMContentLoaded', () => {
         doc.pdfDone = true;
         
         const pageWidth = doc.internal.pageSize.getWidth();
+        const centerX = pageWidth / 2;
+        const drawCenteredText = (text, y) => {
+            const textWidth = doc.getTextWidth(text);
+            doc.text(text, (pageWidth - textWidth) / 2, y);
+        };
         
-        // Vector Header - CENTER ALIGNED
         doc.setTextColor(0, 0, 0); // Black for report
 
-        // For "Old English", we'll use a very thick Serif with Gothic style spacing.
-        // If they want true custom TTF, they need to doc.addFont(BASE64, 'OldEnglish', 'normal')
-        // Using 'times' bold since it's the standard high-quality serif available
-        doc.setFont('times', 'bold');
-        doc.setFontSize(14);
-        doc.text('Republic of the Philippines', pageWidth / 2, 50, { align: 'center' });
-        
-        doc.setFontSize(16);
-        doc.text('Department of Education', pageWidth / 2, 70, { align: 'center' });
-        
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(9);
-        doc.text('REGION II - CAGAYAN VALLEY', pageWidth / 2, 85, { align: 'center' });
-        doc.text('SCHOOLS DIVISION OF BATANES', pageWidth / 2, 98, { align: 'center' });
+        const logoWidth = 40;
+        const logoHeight = 40;
+        const logoX = centerX - (logoWidth / 2);
+        const logoY = 14;
 
-        doc.setFontSize(12);
+        if (doc.__lrflixLogo) {
+            doc.addImage(doc.__lrflixLogo, 'PNG', logoX, logoY, logoWidth, logoHeight);
+        }
+
+        if (doc.__oldEnglishReady) {
+            doc.setFont('OldEnglishFive', 'normal');
+        } else {
+            doc.setFont('times', 'bolditalic');
+        }
+        doc.setFontSize(9);
+        drawCenteredText('Republic of the Philippines', 63);
+
+        if (doc.__oldEnglishReady) {
+            doc.setFont('OldEnglishFive', 'normal');
+        } else {
+            doc.setFont('times', 'bolditalic');
+        }
+        doc.setFontSize(11);
+        drawCenteredText('Department of Education', 74);
+
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7.5);
+        drawCenteredText('REGION II - CAGAYAN VALLEY', 85);
+        drawCenteredText('SCHOOLS DIVISION OF BATANES', 95);
+
+        doc.setFontSize(9.5);
         doc.setFont('helvetica', 'bold');
         let titleLine = 'LEARNING RESOURCE INVENTORY REPORT';
         if (month || year) titleLine += ` - ${month ? getMonthName(month) : ''} ${year || ''}`;
-        doc.text(titleLine, pageWidth / 2, 120, { align: 'center', charSpace: 1 });
+        drawCenteredText(titleLine, 114);
 
         const body = resources.map(r => [
             r.title, 
-            r.category || '–', 
-            r.resource_type || '–', 
-            r.authors || '–', 
-            r.learning_area || '–', 
-            r.grade_level || '–', 
-            r.year_published || (r.created_at ? r.created_at.split(' ')[0] : '–')
+            r.category || 'â€“', 
+            r.resource_type || 'â€“', 
+            r.authors || 'â€“', 
+            r.learning_area || 'â€“', 
+            r.grade_level || 'â€“', 
+            r.year_published || (r.created_at ? r.created_at.split(' ')[0] : 'â€“')
         ]);
 
-        let startY = 140;
+        let startY = 135;
 
         if (dlChart && resChart) {
             // Draw charts with High Contrast Vector Quality
             const chartW = pageWidth - 100;
             const chartH = 180;
 
-            doc.setFontSize(11);
+            doc.setFontSize(10);
             doc.setFont('helvetica', 'bold');
-            doc.text('Downloads by Category', pageWidth / 2, 150, { align: 'center' });
-            // Add image (PNG at 3x DPI behaves like vector in PDF)
-            doc.addImage(dlChart, 'PNG', 50, 160, chartW, chartH, undefined, 'FAST');
+            drawCenteredText('Downloads by Category', 145);
+            doc.addImage(dlChart, 'PNG', 50, 155, chartW, chartH, undefined, 'FAST');
 
-            doc.text('Resources by Category', pageWidth / 2, 360, { align: 'center' });
-            doc.addImage(resChart, 'PNG', 50, 370, chartW, chartH, undefined, 'FAST');
+            drawCenteredText('Resources by Category', 345);
+            doc.addImage(resChart, 'PNG', 50, 355, chartW, chartH, undefined, 'FAST');
             
-            startY = 570; 
+            startY = 560; 
         }
 
         doc.autoTable({
@@ -835,11 +981,11 @@ document.addEventListener('DOMContentLoaded', () => {
     function generateExcelReport(resources, year, month) {
         const wsData = resources.map(r => ({
             'Title': r.title,
-            'Category': r.category || '–',
-            'Type': r.resource_type || '–',
-            'Authors': r.authors || '–',
-            'Subject': r.learning_area || '–',
-            'Grade Level': r.grade_level || '–',
+            'Category': r.category || 'â€“',
+            'Type': r.resource_type || 'â€“',
+            'Authors': r.authors || 'â€“',
+            'Subject': r.learning_area || 'â€“',
+            'Grade Level': r.grade_level || 'â€“',
             'Published Date': r.year_published || r.created_at
         }));
 
@@ -856,55 +1002,98 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function loadFeedbacks() {
         const table = document.getElementById('feedback-table').querySelector('tbody');
+        const cTable = document.getElementById('lr-comments-table').querySelector('tbody');
         table.innerHTML = '<tr><td colspan="4" style="text-align:center;">Loading feedbacks...</td></tr>';
-        
+        cTable.innerHTML = '<tr><td colspan="5" style="text-align:center;">Loading comments...</td></tr>';
+
         fetch('api/resources.php?action=list_feedback')
             .then(res => res.json())
             .then(data => {
-                table.innerHTML = '';
-                if (data.success && data.feedbacks.length > 0) {
-                    data.feedbacks.forEach(f => {
-                        const tr = document.createElement('tr');
-                        tr.innerHTML = `
-                            <td>${f.first_name} ${f.last_name}</td>
-                            <td>${f.school || '–'}</td>
-                            <td>${new Date(f.created_at).toLocaleDateString()}</td>
-                            <td style="max-width:300px; white-space:normal;">${f.suggestion}</td>
-                        `;
-                        table.appendChild(tr);
-                    });
-                } else {
-                    table.innerHTML = '<tr><td colspan="4" style="text-align:center;">No feedbacks yet.</td></tr>';
-                }
+                allFeedbacks = data.success ? data.feedbacks : [];
+                renderFeedbackTable();
             }).catch(() => {
+                allFeedbacks = [];
                 table.innerHTML = '<tr><td colspan="4" style="text-align:center; color:red;">Error loading feedbacks.</td></tr>';
             });
-            
-        const cTable = document.getElementById('lr-comments-table').querySelector('tbody');
-        cTable.innerHTML = '<tr><td colspan="5" style="text-align:center;">Loading comments...</td></tr>';
+
         fetch('api/resources.php?action=list_comments')
             .then(res => res.json())
             .then(data => {
-                cTable.innerHTML = '';
-                if (data.success && data.comments.length > 0) {
-                    data.comments.forEach(c => {
-                        const tr = document.createElement('tr');
-                        tr.innerHTML = `
-                            <td>${c.first_name} ${c.last_name}</td>
-                            <td>${c.school || '–'}</td>
-                            <td style="max-width:200px; white-space:normal; font-weight:bold;">${c.resource_title}</td>
-                            <td>${new Date(c.created_at).toLocaleDateString()}</td>
-                            <td style="max-width:300px; white-space:normal;">${c.comment}</td>
-                        `;
-                        cTable.appendChild(tr);
-                    });
-                } else {
-                    cTable.innerHTML = '<tr><td colspan="5" style="text-align:center;">No LR comments yet.</td></tr>';
-                }
+                allComments = data.success ? data.comments : [];
+                renderCommentsTable();
             }).catch(() => {
+                allComments = [];
                 cTable.innerHTML = '<tr><td colspan="5" style="text-align:center; color:red;">Error loading comments.</td></tr>';
             });
     }
+
+    function renderFeedbackTable() {
+        const tbody = document.getElementById('feedback-table').querySelector('tbody');
+        tbody.innerHTML = '';
+        const start = (feedbackState.page - 1) * feedbackState.perPage;
+        const pageItems = allFeedbacks.slice(start, start + feedbackState.perPage);
+
+        pageItems.forEach(f => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${f.first_name} ${f.last_name}</td>
+                <td>${f.school || '–'}</td>
+                <td>${new Date(f.created_at).toLocaleDateString()}</td>
+                <td style="max-width:300px; white-space:normal;">${f.suggestion}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+        if (pageItems.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">No feedbacks yet.</td></tr>';
+        }
+
+        renderPagination('feedback-pagination', feedbackState.page, allFeedbacks.length, feedbackState.perPage, (page) => {
+            feedbackState.page = page;
+            renderFeedbackTable();
+        });
+    }
+
+    function renderCommentsTable() {
+        const tbody = document.getElementById('lr-comments-table').querySelector('tbody');
+        tbody.innerHTML = '';
+        const start = (commentsState.page - 1) * commentsState.perPage;
+        const pageItems = allComments.slice(start, start + commentsState.perPage);
+
+        pageItems.forEach(c => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${c.first_name} ${c.last_name}</td>
+                <td>${c.school || '–'}</td>
+                <td style="max-width:200px; white-space:normal; font-weight:bold;">${c.resource_title}</td>
+                <td>${new Date(c.created_at).toLocaleDateString()}</td>
+                <td style="max-width:300px; white-space:normal;">${c.comment}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+        if (pageItems.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">No LR comments yet.</td></tr>';
+        }
+
+        renderPagination('comments-pagination', commentsState.page, allComments.length, commentsState.perPage, (page) => {
+            commentsState.page = page;
+            renderCommentsTable();
+        });
+    }
+
+    document.querySelectorAll('.feedback-tab-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            document.querySelectorAll('.feedback-tab-btn').forEach(b => {
+                b.classList.remove('btn-primary');
+                b.classList.add('btn-secondary');
+            });
+            e.currentTarget.classList.remove('btn-secondary');
+            e.currentTarget.classList.add('btn-primary');
+            document.getElementById('feedback-suggestions-panel').style.display = e.currentTarget.dataset.target === 'feedback-suggestions-panel' ? 'block' : 'none';
+            document.getElementById('feedback-comments-panel').style.display = e.currentTarget.dataset.target === 'feedback-comments-panel' ? 'block' : 'none';
+        });
+    });
 
     // Form Clearing Logic
     window.confirmClearForm = (force = false) => {

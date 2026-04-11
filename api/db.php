@@ -45,6 +45,16 @@ try {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )");
 
+    $pdo->exec("CREATE TABLE IF NOT EXISTS visits (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        session_id VARCHAR(128) NOT NULL,
+        user_id INT NULL,
+        visited_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )");
+    $pdo->exec("ALTER TABLE visits ADD COLUMN IF NOT EXISTS visited_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
+    $pdo->exec("ALTER TABLE visits ADD COLUMN IF NOT EXISTS session_id VARCHAR(128) NOT NULL");
+    $pdo->exec("ALTER TABLE visits ADD COLUMN IF NOT EXISTS user_id INT NULL");
+
     // Ensure all biographical columns exist for users
     $cols_to_add = [
         'middle_name' => 'VARCHAR(100)',
