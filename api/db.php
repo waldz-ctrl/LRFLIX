@@ -7,8 +7,8 @@ ini_set('session.cookie_samesite', 'Lax');
 session_start();
 
 $host = 'localhost';
-$db_user = 'bffvvmvztl_lrflixdb'; // Use correct creds
-$db_pass = '@Lgorithm23';
+$db_user = 'bffvvmvztl_waldz'; // Updated user
+$db_pass = '@Lgorithm23';   // Updated password
 $db_name = 'bffvvmvztl_lrflixdb';
 
 try {
