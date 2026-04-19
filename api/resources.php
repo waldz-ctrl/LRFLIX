@@ -170,6 +170,14 @@ elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $resource_type = $_POST['resource_type'] ?? '';
         $year_published = $_POST['year_published'] ?? '';
 
+        $curriculum = $_POST['curriculum'] ?? '';
+        $school_level = $_POST['school_level'] ?? '';
+        $camp_type = $_POST['camp_type'] ?? '';
+        $material_type = $_POST['material_type'] ?? '';
+        $component = $_POST['component'] ?? '';
+        $module_no = $_POST['module_no'] ?? '';
+        $code = $_POST['code'] ?? '';
+
         $uploadDir = '../uploads/';
         if (!is_dir($uploadDir))
             mkdir($uploadDir, 0777, true);
@@ -182,8 +190,8 @@ elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             move_uploaded_file($_FILES['file']['tmp_name'], $filePath);
 
-            $stmt = $pdo->prepare("INSERT INTO resources (category, title, authors, language, grade_level, quarter, week, content_standards, performance_standards, competencies, description, learning_area, resource_type, year_published, file_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-            $stmt->execute([$category, $title, $authors, $language, $grade_level, $quarter, $week, $content_standards, $performance_standards, $competencies, $description, $learning_area, $resource_type, $year_published, $dbFilePath]);
+            $stmt = $pdo->prepare("INSERT INTO resources (category, title, authors, language, grade_level, quarter, week, content_standards, performance_standards, competencies, description, learning_area, resource_type, year_published, curriculum, school_level, camp_type, material_type, component, module_no, code, file_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt->execute([$category, $title, $authors, $language, $grade_level, $quarter, $week, $content_standards, $performance_standards, $competencies, $description, $learning_area, $resource_type, $year_published, $curriculum, $school_level, $camp_type, $material_type, $component, $module_no, $code, $dbFilePath]);
             echo json_encode(['success' => true, 'message' => 'Upload successful']);
         }
         else {
@@ -213,8 +221,16 @@ elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $resource_type = $_POST['resource_type'] ?? '';
         $year_published = $_POST['year_published'] ?? '';
 
-        $sql = "UPDATE resources SET category=?, title=?, authors=?, language=?, grade_level=?, quarter=?, week=?, content_standards=?, performance_standards=?, competencies=?, description=?, learning_area=?, resource_type=?, year_published=? WHERE id=?";
-        $params = [$category, $title, $authors, $language, $grade_level, $quarter, $week, $content_standards, $performance_standards, $competencies, $description, $learning_area, $resource_type, $year_published, $id];
+        $curriculum = $_POST['curriculum'] ?? '';
+        $school_level = $_POST['school_level'] ?? '';
+        $camp_type = $_POST['camp_type'] ?? '';
+        $material_type = $_POST['material_type'] ?? '';
+        $component = $_POST['component'] ?? '';
+        $module_no = $_POST['module_no'] ?? '';
+        $code = $_POST['code'] ?? '';
+
+        $sql = "UPDATE resources SET category=?, title=?, authors=?, language=?, grade_level=?, quarter=?, week=?, content_standards=?, performance_standards=?, competencies=?, description=?, learning_area=?, resource_type=?, year_published=?, curriculum=?, school_level=?, camp_type=?, material_type=?, component=?, module_no=?, code=? WHERE id=?";
+        $params = [$category, $title, $authors, $language, $grade_level, $quarter, $week, $content_standards, $performance_standards, $competencies, $description, $learning_area, $resource_type, $year_published, $curriculum, $school_level, $camp_type, $material_type, $component, $module_no, $code, $id];
 
         if (isset($_FILES['file']) && $_FILES['file']['size'] > 0) {
             $uploadDir = '../uploads/';
@@ -235,8 +251,8 @@ elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 @unlink('../' . $oldRes['file_path']);
             }
 
-            $sql = "UPDATE resources SET category=?, title=?, authors=?, language=?, grade_level=?, quarter=?, week=?, content_standards=?, performance_standards=?, competencies=?, description=?, learning_area=?, resource_type=?, year_published=?, file_path=? WHERE id=?";
-            $params = [$category, $title, $authors, $language, $grade_level, $quarter, $week, $content_standards, $performance_standards, $competencies, $description, $learning_area, $resource_type, $year_published, $dbFilePath, $id];
+            $sql = "UPDATE resources SET category=?, title=?, authors=?, language=?, grade_level=?, quarter=?, week=?, content_standards=?, performance_standards=?, competencies=?, description=?, learning_area=?, resource_type=?, year_published=?, curriculum=?, school_level=?, camp_type=?, material_type=?, component=?, module_no=?, code=?, file_path=? WHERE id=?";
+            $params = [$category, $title, $authors, $language, $grade_level, $quarter, $week, $content_standards, $performance_standards, $competencies, $description, $learning_area, $resource_type, $year_published, $curriculum, $school_level, $camp_type, $material_type, $component, $module_no, $code, $dbFilePath, $id];
         }
 
         $stmt = $pdo->prepare($sql);
@@ -314,6 +330,66 @@ elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt->execute([$userId, $suggestion]);
         echo json_encode(['success' => true, 'message' => 'Thank you for your feedback!']);
 
+    }
+    elseif ($action === 'related') {
+        $id = (int)($_GET['id'] ?? 0);
+        
+        $stmt = $pdo->prepare("SELECT grade_level, learning_area, competencies, category FROM resources WHERE id = ?");
+        $stmt->execute([$id]);
+        $current = $stmt->fetch();
+        
+        if (!$current) {
+            echo json_encode(['success' => false, 'message' => 'Resource not found']);
+            exit;
+        }
+
+        $grade = $current['grade_level'];
+        $area = $current['learning_area'];
+        $comp = $current['competencies'];
+        $cat = $current['category'];
+
+        // Prioritize: Same Competency > Same Grade & Subject > Same Category
+        // Fetch up to 10
+        // Simplest approximation using ORDER BY logic:
+        $sql = "
+            SELECT *, 
+            (CASE 
+                WHEN competencies = ? THEN 3 
+                WHEN grade_level = ? AND learning_area = ? THEN 2 
+                WHEN category = ? THEN 1 
+                ELSE 0 END) as relevance
+            FROM resources 
+            WHERE id != ?
+            ORDER BY relevance DESC, created_at DESC 
+            LIMIT 10
+        ";
+        
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([$comp, $grade, $area, $cat, $id]);
+        $related = $stmt->fetchAll();
+        
+        echo json_encode(['success' => true, 'related' => $related]);
+    }
+    elseif ($action === 'comment') {
+        if (!isLoggedIn()) {
+            echo json_encode(['success' => false, 'message' => 'Unauthorized']);
+            exit;
+        }
+        $resId = $_POST['resource_id'] ?? 0;
+        $comment = $_POST['comment'] ?? '';
+        $userId = $_SESSION['user_id'];
+        
+        if (empty($comment)) {
+            echo json_encode(['success' => false, 'message' => 'Comment empty']);
+            exit;
+        }
+        
+        // Let's reuse the feedback table or create a specialized comment logging strategy
+        // Feedback table accepts user_id and suggestion. I'll prepend "Comment on Resource $resId: "
+        $suggestion = "Resource $resId Comment: " . $comment;
+        $stmt = $pdo->prepare("INSERT INTO feedback (user_id, suggestion) VALUES (?, ?)");
+        $stmt->execute([$userId, $suggestion]);
+        echo json_encode(['success' => true]);
     }
     elseif ($action === 'download') {
 

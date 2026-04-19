@@ -72,6 +72,22 @@ try {
         $pdo->exec("ALTER TABLE users ADD COLUMN IF NOT EXISTS $col $type");
     }
 
+    // Ensure all resource columns exist for dynamic uploads
+    $res_cols = [
+        'curriculum' => 'VARCHAR(100)',
+        'school_level' => 'VARCHAR(50)',
+        'code' => 'VARCHAR(100)',
+        'component' => 'VARCHAR(100)',
+        'module_no' => 'VARCHAR(50)',
+        'camp_type' => 'VARCHAR(100)',
+        'material_type' => 'VARCHAR(100)'
+    ];
+    
+    foreach ($res_cols as $col => $type) {
+        $pdo->exec("ALTER TABLE resources ADD COLUMN IF NOT EXISTS $col $type");
+    }
+
+
 }
 catch (Exception $e) {
 // Silently continue

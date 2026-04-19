@@ -790,27 +790,17 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        items.forEach(res => {
-            const card = document.createElement('div');
-            card.style.cssText = 'width:200px; cursor:pointer; position:relative; border-radius:6px; overflow:hidden; background:#222; transition:transform 0.3s;';
-            card.addEventListener('mouseenter', () => card.style.transform = 'scale(1.05)');
-            card.addEventListener('mouseleave', () => card.style.transform = 'scale(1)');
-            card.addEventListener('click', () => openModal(res));
-
-            const canvas = document.createElement('canvas');
-            canvas.className = 'poster';
-            canvas.style.cssText = 'width:100%; height:280px; background:#222; display:block; margin:0;';
-            canvas.title = res.title;
-
-            const label = document.createElement('div');
-            label.style.cssText = 'padding:8px; font-size:0.8rem; color:#ddd; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;';
-            label.textContent = res.title;
-
-            card.appendChild(canvas);
-            card.appendChild(label);
-            grid.appendChild(card);
-            renderPdfThumbnail(res.file_path, canvas);
+        // Group by sub-categories (resource_type)
+        const subGrouped = {};
+        items.forEach(r => {
+            const sub = r.resource_type || 'Uncategorized';
+            if (!subGrouped[sub]) subGrouped[sub] = [];
+            subGrouped[sub].push(r);
         });
+
+        for (const [subCat, subItems] of Object.entries(subGrouped)) {
+            renderHorizontalRow(grid, subCat, subItems);
+        }
     };
 
     async function renderPdfThumbnail(url, canvas) {
@@ -830,6 +820,22 @@ document.addEventListener('DOMContentLoaded', () => {
         const container = document.getElementById('dynamic-categories-container');
         container.innerHTML = '';
 
+        // --- SUGGESTED FOR YOU ---
+        if (currentUser) {
+            const userGrades = currentUser.grade_level ? currentUser.grade_level.split(',').map(s=>s.trim().toLowerCase()) : [];
+            const userSubjects = currentUser.subjects_taught ? currentUser.subjects_taught.split(',').map(s=>s.trim().toLowerCase()) : [];
+            
+            const suggested = resources.filter(r => {
+                const rGrade = (r.grade_level||'').toLowerCase();
+                const rSubject = (r.learning_area||'').toLowerCase();
+                return userGrades.includes(rGrade) || userSubjects.includes(rSubject);
+            });
+
+            if (suggested.length > 0) {
+                renderHorizontalRow(container, "Suggested for You", suggested.slice(0, 15), null, true);
+            }
+        }
+
         const grouped = {};
         resources.forEach(r => {
             const cat = r.category || 'Other / Uncategorized';
@@ -838,42 +844,54 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         for (const [cat, items] of Object.entries(grouped)) {
-            const displayItems = items.slice(0, 15);
-
-            const rowDiv = document.createElement('div');
-            rowDiv.className = 'row';
-            rowDiv.id = `cat-header-${cat}`;
-            rowDiv.innerHTML = `
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 1rem;">
-                    <h2>${cat}</h2>
-                    <button class="btn btn-secondary" style="padding: 5px 10px; font-size: 0.8rem;" onclick="filterCategory('${cat}')">See All</button>
-                </div>
-                <div style="position:relative; display:flex; align-items:center;">
-                    <button class="scroll-left" style="position:absolute; left:0; z-index:10; background:rgba(0,0,0,0.5); border:none; color:white; font-size:2rem; cursor:pointer; height:100%;"><i class="fas fa-chevron-left"></i></button>
-                    <div class="row-posters" style="display:flex; overflow-x:hidden; scroll-behavior:smooth; width:100%;"></div>
-                    <button class="scroll-right" style="position:absolute; right:0; z-index:10; background:rgba(0,0,0,0.5); border:none; color:white; font-size:2rem; cursor:pointer; height:100%;"><i class="fas fa-chevron-right"></i></button>
-                </div>
-            `;
-            container.appendChild(rowDiv);
-
-            const postersDiv = rowDiv.querySelector('.row-posters');
-            displayItems.forEach(res => {
-                const canvas = document.createElement('canvas');
-                canvas.className = 'poster';
-                canvas.style.backgroundColor = '#222';
-                canvas.title = res.title;
-                canvas.addEventListener('click', () => openModal(res));
-                postersDiv.appendChild(canvas);
-                // Async generate thumbnail
-                renderPdfThumbnail(res.file_path, canvas);
-            });
-
-            // Scroll Logic
-            const leftBtn = rowDiv.querySelector('.scroll-left');
-            const rightBtn = rowDiv.querySelector('.scroll-right');
-            leftBtn.addEventListener('click', () => postersDiv.scrollBy({ left: -300, behavior: 'smooth' }));
-            rightBtn.addEventListener('click', () => postersDiv.scrollBy({ left: 300, behavior: 'smooth' }));
+            renderHorizontalRow(container, cat, items.slice(0, 15), `filterCategory('${cat}')`);
         }
+    }
+
+    function renderHorizontalRow(container, title, items, seeAllAction = null, isSuggested = false) {
+        const rowDiv = document.createElement('div');
+        rowDiv.className = 'row';
+        rowDiv.id = `row-${title.replace(/[^a-zA-Z0-9]/g, '-')}`;
+        rowDiv.innerHTML = `
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 1rem;">
+                <h2>${isSuggested ? '<i class="fas fa-magic" style="color:var(--accent-color); margin-right:8px;"></i>' : ''}${title}</h2>
+                ${seeAllAction ? `<button class="btn btn-secondary" style="padding: 5px 10px; font-size: 0.8rem;" onclick="${seeAllAction}">See All</button>` : ''}
+            </div>
+            <div style="position:relative; display:flex; align-items:center;">
+                <button class="scroll-left" style="position:absolute; left:0; z-index:10; background:rgba(0,0,0,0.5); border:none; color:white; font-size:2rem; cursor:pointer; height:100%;"><i class="fas fa-chevron-left"></i></button>
+                <div class="row-posters" style="display:flex; overflow-x:hidden; scroll-behavior:smooth; width:100%;"></div>
+                <button class="scroll-right" style="position:absolute; right:0; z-index:10; background:rgba(0,0,0,0.5); border:none; color:white; font-size:2rem; cursor:pointer; height:100%;"><i class="fas fa-chevron-right"></i></button>
+            </div>
+        `;
+        container.appendChild(rowDiv);
+
+        const postersDiv = rowDiv.querySelector('.row-posters');
+        items.forEach(res => {
+            const card = document.createElement('div');
+            card.style.cssText = 'min-width:200px; max-width:200px; margin-right:12px; cursor:pointer; position:relative; border-radius:6px; overflow:hidden; background:#222; transition:transform 0.3s;';
+            card.addEventListener('mouseenter', () => card.style.transform = 'scale(1.05)');
+            card.addEventListener('mouseleave', () => card.style.transform = 'scale(1)');
+            card.addEventListener('click', () => openModal(res));
+
+            const canvas = document.createElement('canvas');
+            canvas.className = 'poster';
+            canvas.style.cssText = 'width:100%; height:280px; background:#222; display:block; margin:0;';
+            canvas.title = res.title;
+
+            const label = document.createElement('div');
+            label.style.cssText = 'padding:8px; font-size:0.8rem; color:#ddd; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;';
+            label.textContent = res.title;
+
+            card.appendChild(canvas);
+            card.appendChild(label);
+            postersDiv.appendChild(card);
+            renderPdfThumbnail(res.file_path, canvas);
+        });
+
+        const leftBtn = rowDiv.querySelector('.scroll-left');
+        const rightBtn = rowDiv.querySelector('.scroll-right');
+        leftBtn.addEventListener('click', () => postersDiv.scrollBy({ left: -300, behavior: 'smooth' }));
+        rightBtn.addEventListener('click', () => postersDiv.scrollBy({ left: 300, behavior: 'smooth' }));
     }
 
     function renderResources(resources, container) {

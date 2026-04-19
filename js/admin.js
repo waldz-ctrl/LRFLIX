@@ -1,4 +1,4 @@
-﻿document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', () => {
     let reportAssetsPromise = null;
 
     function arrayBufferToBase64(buffer) {
@@ -78,6 +78,7 @@
         // Load feedback when switching to it
         if(targetId === 'analytics-section') loadAnalytics();
         if(targetId === 'feedbacks-section') loadFeedbacks();
+        if(targetId === 'comp-section') loadCompetencies();
     }
 
 
@@ -86,7 +87,7 @@
             const target = e.currentTarget.dataset.target;
             // If returning to upload tab naturally, reset it
             if(target === 'upload-section') {
-                confirmClearForm(true);
+                try { clearAction(false); } catch(e) { console.error(e); }
             }
             switchTab(target);
         });
@@ -137,17 +138,21 @@
     const addAuthorBtn = document.getElementById('add-author-btn');
     const authorsGroup = document.getElementById('authors-group');
     let authorCountObj = { count: 1 };
-    addAuthorBtn.addEventListener('click', () => {
-        createDynamicField('res-author', authorsGroup, 5, 'Author', authorCountObj, addAuthorBtn);
-    });
+    if (addAuthorBtn && authorsGroup) {
+        addAuthorBtn.addEventListener('click', () => {
+            createDynamicField('res-author', authorsGroup, 5, 'Author', authorCountObj, addAuthorBtn);
+        });
+    }
 
     // Dynamic Competencies
     const addCompBtn = document.getElementById('add-comp-btn');
     const compGroup = document.getElementById('competencies-group');
     let compCountObj = { count: 1 };
-    addCompBtn.addEventListener('click', () => {
-        createDynamicField('res-comp', compGroup, 10, 'e.g. math-grade1, basic-addition', compCountObj, addCompBtn);
-    });
+    if (addCompBtn && compGroup) {
+        addCompBtn.addEventListener('click', () => {
+            createDynamicField('res-comp', compGroup, 10, 'e.g. math-grade1, basic-addition', compCountObj, addCompBtn);
+        });
+    }
 
     // Drag and Drop
     const dropZone = document.getElementById('drop-zone');
@@ -231,25 +236,45 @@
         }
 
         const authors = Array.from(document.querySelectorAll('.res-author')).map(i => i.value).filter(v=>v).join(', ');
-        const competencies = Array.from(document.querySelectorAll('.res-comp')).map(i => i.value).filter(v=>v).join('; ');
-        const formData = new FormData();
+        const competenciesArray = Array.from(document.querySelectorAll('.res-comp')).map(i => i.value).filter(v=>v);
+        const hiddenComp = document.getElementById('res-comp').value;
+        if(hiddenComp && !competenciesArray.includes(hiddenComp)) competenciesArray.unshift(hiddenComp);
+        const finalComp = competenciesArray.join('; ');
+        
+        const finalGrade = document.getElementById('res-grade').value === 'Others...' ? document.getElementById('res-grade-custom').value : document.getElementById('res-grade').value;
 
+        const getVal = (id) => {
+            const el = document.getElementById(id);
+            if (!el) return '';
+            return el.tomselect ? el.tomselect.getValue() : el.value;
+        };
+
+        const formData = new FormData();
         if (isEditing) formData.append('id', resId);
         
-        formData.append('category', document.getElementById('res-category').tomselect.getValue());
-        formData.append('title', document.getElementById('res-title').value);
+        formData.append('category', getVal('res-category'));
+        formData.append('title', getVal('res-title'));
         formData.append('authors', authors);
-        formData.append('language', document.getElementById('res-language').tomselect.getValue());
-        formData.append('grade_level', document.getElementById('res-grade').tomselect.getValue());
-        formData.append('quarter', document.getElementById('res-quarter').tomselect.getValue());
-        formData.append('week', document.getElementById('res-week').value);
-        formData.append('content_standards', document.getElementById('res-content-std').value);
-        formData.append('performance_standards', document.getElementById('res-perf-std').value);
-        formData.append('competencies', competencies);
-        formData.append('description', document.getElementById('res-desc').value);
-        formData.append('learning_area', document.getElementById('res-learning-area').tomselect.getValue());
-        formData.append('resource_type', document.getElementById('res-type').tomselect.getValue());
-        formData.append('year_published', document.getElementById('res-year').tomselect.getValue());
+        formData.append('language', getVal('res-language'));
+        formData.append('grade_level', finalGrade);
+        formData.append('quarter', getVal('res-quarter'));
+        formData.append('week', getVal('res-week'));
+        formData.append('content_standards', getVal('res-content-std'));
+        formData.append('performance_standards', getVal('res-perf-std'));
+        formData.append('competencies', finalComp);
+        formData.append('description', getVal('res-desc'));
+        formData.append('learning_area', getVal('res-learning-area'));
+        formData.append('resource_type', getVal('res-type'));
+        formData.append('year_published', getVal('res-year'));
+
+        // New fields mapped to database
+        formData.append('curriculum', getVal('res-curriculum'));
+        formData.append('school_level', getVal('res-school-level'));
+        formData.append('camp_type', getVal('res-camp-type'));
+        formData.append('material_type', getVal('res-material-type'));
+        formData.append('component', getVal('res-component'));
+        formData.append('module_no', getVal('res-module-no'));
+        formData.append('code', getVal('res-code'));
         
         if (fileInput.files.length > 0) {
             formData.append('file', fileInput.files[0]);
@@ -653,7 +678,7 @@
         document.getElementById('cancel-edit-btn').classList.remove('hidden');
 
         // Reset and populate authors
-        authorsGroup.innerHTML = '';
+        if(authorsGroup) authorsGroup.innerHTML = '';
         authorCountObj.count = 0;
         addAuthorBtn.style.display = 'inline-block';
         if(res.authors) {
@@ -668,7 +693,7 @@
         }
 
         // Reset and populate competencies
-        compGroup.innerHTML = '';
+        if(compGroup) compGroup.innerHTML = '';
         compCountObj.count = 0;
         addCompBtn.style.display = 'inline-block';
         if(res.competencies) {
@@ -1123,16 +1148,20 @@
         });
         
         // Reset dynamic authors
-        authorsGroup.innerHTML = '';
-        authorCountObj.count = 0;
-        addAuthorBtn.style.display = 'inline-block';
-        createDynamicField('res-author', authorsGroup, 5, 'Author', authorCountObj, addAuthorBtn);
+        if(authorsGroup && addAuthorBtn) {
+            authorsGroup.innerHTML = '';
+            authorCountObj.count = 0;
+            addAuthorBtn.style.display = 'inline-block';
+            createDynamicField('res-author', authorsGroup, 5, 'Author', authorCountObj, addAuthorBtn);
+        }
 
         // Reset dynamic competencies
-        compGroup.innerHTML = '';
-        compCountObj.count = 0;
-        addCompBtn.style.display = 'inline-block';
-        createDynamicField('res-comp', compGroup, 10, 'e.g. math-grade1, basic-addition', compCountObj, addCompBtn);
+        if(false) {
+            compGroup.innerHTML = '';
+            compCountObj.count = 0;
+            addCompBtn.style.display = 'inline-block';
+            createDynamicField('res-comp', compGroup, 10, 'e.g. math-grade1, basic-addition', compCountObj, addCompBtn);
+        }
         
         document.getElementById('resource_id').value = '';
         document.getElementById('upload-tab-title').innerText = 'Upload Learning Resource';
@@ -1177,5 +1206,489 @@
         
         document.getElementById('cancel-edit-btn').classList.add('hidden');
     }
+
+    // === Competencies Management Logic ===
+    window.compState = { page: 1, limit: 15, search: '', grade: '', subject: '', quarter: '', week: '' };
+    window.allCompetencies = [];
+
+    window.loadCompetencies = () => {
+        fetch(`api/competencies.php?action=list&page=${window.compState.page}&limit=${window.compState.limit}&search=${encodeURIComponent(window.compState.search)}&grade=${encodeURIComponent(window.compState.grade)}&subject=${encodeURIComponent(window.compState.subject)}&quarter=${encodeURIComponent(window.compState.quarter)}&week=${encodeURIComponent(window.compState.week)}`)
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    window.allCompetencies = data.competencies;
+                    renderCompetenciesTable(data.total);
+                }
+            });
+    };
+
+    function renderCompetenciesTable(totalItems) {
+        const tbody = document.querySelector('#comp-table tbody');
+        if (!tbody) return;
+        tbody.innerHTML = '';
+        window.allCompetencies.forEach(c => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${c.code || '-'}</td>
+                <td>${c.subject || '-'}</td>
+                <td>${c.school_level || '-'}</td>
+                  <td>${c.grade_level || '-'}</td>
+                  <td>${c.quarter_term || '-'}</td>
+                <td><div style="max-height: 50px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;" title="${c.melc || ''}">${c.melc || '-'}</div></td>
+                <td style="white-space: nowrap;">
+                    <button class="btn btn-primary" onclick="editCompetency(${c.id})" style="margin-right: 5px; padding: 5px 10px;"><i class="fas fa-edit"></i> Edit</button>
+                    <button class="btn btn-secondary" onclick="deleteCompetency(${c.id})" style="padding: 5px 10px;"><i class="fas fa-trash"></i></button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+        if (allCompetencies.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#aaa;">No competencies found.</td></tr>';
+        }
+        renderPagination('comp-pagination', window.compState.page, totalItems, window.compState.limit, (page) => {
+            window.compState.page = page;
+            loadCompetencies();
+        });
+    }
+
+    document.getElementById('comp-search')?.addEventListener('input', (e) => {
+        window.compState.search = e.target.value.trim();
+        window.compState.page = 1;
+        loadCompetencies();
+    });
+
+    window.openCompModal = () => {
+        document.getElementById('comp-id').value = '';
+        document.getElementById('comp-form').reset();
+        document.getElementById('comp-modal-title').innerText = 'Add New Competency';
+        document.getElementById('comp-modal').classList.remove('hidden');
+        document.getElementById('comp-modal').classList.add('active');
+    };
+
+    window.closeCompModal = () => {
+        document.getElementById('comp-modal').classList.add('hidden');
+        document.getElementById('comp-modal').classList.remove('active');
+    };
+
+    window.editCompetency = (id) => {
+        const c = window.allCompetencies.find(comp => comp.id == id);
+        if (!c) return;
+        document.getElementById('comp-id').value = c.id;
+        document.getElementById('comp-curriculum').value = c.curriculum || '';
+        document.getElementById('comp-school-level').value = c.school_level || '';
+          document.getElementById('comp-grade').value = c.grade_level || '';
+        document.getElementById('comp-subject').value = c.subject || '';
+        document.getElementById('comp-quarter').value = c.quarter_term || '';
+        document.getElementById('comp-week').value = c.week || '';
+        document.getElementById('comp-code').value = c.code || '';
+        document.getElementById('comp-melc').value = c.melc || '';
+        document.getElementById('comp-content-std').value = c.content_std || '';
+        document.getElementById('comp-perf-std').value = c.performance_std || '';
+        
+        document.getElementById('comp-modal-title').innerText = 'Edit Competency';
+        document.getElementById('comp-modal').classList.remove('hidden');
+        document.getElementById('comp-modal').classList.add('active');
+    };
+
+    window.deleteCompetency = (id) => {
+        if(confirm("Are you sure you want to delete this competency?")) {
+            fetch('api/competencies.php?action=delete', {
+                method: 'POST',
+                body: JSON.stringify({id}),
+                headers: {'Content-Type': 'application/json'}
+            }).then(() => loadCompetencies());
+        }
+    };
+
+    document.getElementById('comp-form')?.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const data = {
+            id: document.getElementById('comp-id').value,
+            curriculum: document.getElementById('comp-curriculum').value,
+            school_level: document.getElementById('comp-school-level').value,
+              grade_level: document.getElementById('comp-grade').value,
+            subject: document.getElementById('comp-subject').value,
+            quarter_term: document.getElementById('comp-quarter').value,
+            week: document.getElementById('comp-week').value,
+            code: document.getElementById('comp-code').value,
+            melc: document.getElementById('comp-melc').value,
+            content_std: document.getElementById('comp-content-std').value,
+            performance_std: document.getElementById('comp-perf-std').value
+        };
+
+        const action = data.id ? 'edit' : 'add';
+
+        fetch(`api/competencies.php?action=${action}`, {
+            method: 'POST',
+            body: JSON.stringify(data),
+            headers: {'Content-Type': 'application/json'}
+        })
+        .then(res => res.json())
+        .then(resData => {
+            if (resData.success) {
+                closeCompModal();
+                loadCompetencies();
+            } else {
+                alert('Error processing request: ' + resData.message);
+            }
+        });
+    });
+
 });
+// ----- APPEND TO ADMIN.JS ----- //
+
+// --- Upload Form Dynamic Logic ---
+const uploadDynamicGroups = [
+    'group-type', 'group-curriculum', 'group-school-level', 'group-camp-type', 'group-material-type',
+    'group-learning-area', 'group-component', 'group-title', 'group-grade', 'group-module-no',
+    'group-authors', 'group-language', 'group-quarter-week', 'group-quarter', 'group-week',
+    'group-comp', 'group-code', 'group-content-std', 'group-perf-std', 'group-year', 'group-desc', 'group-file'
+];
+
+function updateTomSelect(elId, htmlContent, valToSet = '') {
+    const el = document.getElementById(elId);
+    if(!el) return;
+    if(el.tomselect) {
+        el.tomselect.destroy();
+    }
+    if(htmlContent !== null) el.innerHTML = htmlContent;
+    new TomSelect(el, { create: false });
+    if(valToSet) {
+        if(el.tomselect) el.tomselect.setValue(valToSet);
+        else el.value = valToSet;
+    }
+}
+
+document.getElementById('res-category')?.addEventListener('change', (e) => {
+    const cat = e.target.value;
+    let html = '<option value="">Select...</option>';
+    let types = [];
+    const labelType = document.getElementById('label-type');
+    if(labelType) labelType.innerText = 'LR Type';
+
+    if(cat === 'MATATAG Curriculum Resources') types = ['Lesson Exemplars (LEs)', 'Learning Activity Sheets (LAS)', 'MATATAG 3 Term Budget of Work (BoW)', 'Curriculum Guide'];
+    else if(cat === 'K to 12 Curriculum Resources') types = ['Self-Learning Modules (SLMs)', 'Learning Activity Sheets (LAS)'];
+    else if(cat === 'Contextualized Learning Resources (CLRs)') types = ['School Developed Text-based Materials', 'Ivatan Textbooks', 'Digital Learning Resources'];
+    else if(cat === 'National Learning Camp (NLC)') types = ['Intervention', 'Enhancement', 'Consolidation'];
+    else if(cat === 'National Reading Program (NRP)') types = ['Worksheets', 'Lesson Exemplars'];
+    
+    types.forEach(t => { html += `<option value="${t}">${t}</option>`; });
+    updateTomSelect('res-type', html);
+    updateFormVisibility();
+});
+
+document.getElementById('res-type')?.addEventListener('change', updateFormVisibility);
+document.getElementById('res-material-type')?.addEventListener('change', updateFormVisibility);
+
+function updateFormVisibility() {
+    const cat = document.getElementById('res-category').value;
+    const type = document.getElementById('res-type').value;
+    const labelType = document.getElementById('label-type');
+    const labelMaterial = document.getElementById('label-material-type');
+    
+    let toShow = ['group-file']; 
+    if(cat) toShow.push('group-type');
+
+    if(cat && type) {
+        if(cat === 'MATATAG Curriculum Resources') {
+            if(type === 'Lesson Exemplars (LEs)' || type === 'Learning Activity Sheets (LAS)') {
+                toShow.push('group-curriculum', 'group-school-level', 'group-learning-area', 'group-title', 'group-grade', 'group-quarter-week', 'group-quarter', 'group-week', 'group-comp', 'group-content-std', 'group-perf-std', 'group-code');
+                const currEl = document.getElementById('res-curriculum');
+                if(currEl.tomselect) currEl.tomselect.setValue('MATATAG'); else currEl.value = 'MATATAG';
+            } else if (type === 'MATATAG 3 Term Budget of Work (BoW)') {
+                toShow.push('group-curriculum', 'group-school-level', 'group-grade', 'group-learning-area', 'group-component');
+                const currEl = document.getElementById('res-curriculum');
+                if(currEl.tomselect) currEl.tomselect.setValue('MATATAG'); else currEl.value = 'MATATAG';
+            } else if (type === 'Curriculum Guide') {
+                toShow.push('group-curriculum', 'group-school-level', 'group-grade', 'group-learning-area');
+                const currEl = document.getElementById('res-curriculum');
+                if(currEl.tomselect) currEl.tomselect.setValue('MATATAG'); else currEl.value = 'MATATAG';
+            }
+        } 
+        else if(cat === 'K to 12 Curriculum Resources') {
+            toShow.push('group-curriculum', 'group-school-level', 'group-learning-area', 'group-title', 'group-grade', 'group-module-no', 'group-quarter-week', 'group-quarter', 'group-week', 'group-comp', 'group-content-std', 'group-perf-std', 'group-code');
+            const currEl = document.getElementById('res-curriculum');
+            if(currEl.tomselect) currEl.tomselect.setValue('K to 12'); else currEl.value = 'K to 12';
+        }
+        else if(cat === 'Contextualized Learning Resources (CLRs)') {
+            if(type === 'School Developed Text-based Materials') {
+                if(labelMaterial) labelMaterial.innerText = 'Type';
+                toShow.push('group-material-type', 'group-curriculum', 'group-school-level', 'group-learning-area', 'group-title', 'group-authors', 'group-language', 'group-grade', 'group-quarter-week', 'group-quarter', 'group-week', 'group-comp', 'group-content-std', 'group-perf-std', 'group-code', 'group-desc', 'group-year');
+                
+                const mType = document.getElementById('res-material-type').value;
+                if(mType === 'Self-Learning Modules (SLM)') toShow.push('group-module-no');
+
+                const mtSelect = document.getElementById('res-material-type');
+                if(!mtSelect.innerHTML.includes('Strategic Intervention')) {
+                    updateTomSelect('res-material-type', '<option value="">Select...</option><option value="Self-Learning Modules (SLM)">Self-Learning Modules (SLM)</option><option value="Learning Activity Sheets (LAS)">Learning Activity Sheets (LAS)</option><option value="Strategic Intervention Material (SIM)">Strategic Intervention Material (SIM)</option><option value="Storybook">Storybook</option><option value="Worksheet">Worksheet</option><option value="Workbook">Workbook</option>');
+                }
+            } else if (type === 'Ivatan Textbooks') {
+                if(labelType) labelType.innerText = 'Resource Type';
+                toShow.push('group-title', 'group-school-level', 'group-grade', 'group-learning-area', 'group-comp', 'group-content-std', 'group-perf-std', 'group-code');
+            } else if (type === 'Digital Learning Resources') {
+                if(labelType) labelType.innerText = 'Resource Type';
+                if(labelMaterial) labelMaterial.innerText = 'Resource Type (Format)';
+                toShow.push('group-title', 'group-desc', 'group-material-type', 'group-school-level', 'group-learning-area', 'group-grade', 'group-comp', 'group-content-std', 'group-perf-std', 'group-code');
+                
+                const mtSelect = document.getElementById('res-material-type');
+                if(!mtSelect.innerHTML.includes('Audio')) {
+                    updateTomSelect('res-material-type', '<option value="">Select...</option><option value="Audio">Audio</option><option value="Video">Video</option><option value="Presentation (PPT)">Presentation (PPT)</option><option value="Image/Graphics">Image/Graphics</option>');
+                }
+            }
+        }
+        else if(cat === 'National Learning Camp (NLC)') {
+            if(labelType) labelType.innerText = 'Camp Type';
+            toShow.push('group-material-type', 'group-school-level', 'group-title', 'group-quarter-week', 'group-week', 'group-learning-area', 'group-grade');
+            const mtSelect = document.getElementById('res-material-type');
+            if(!mtSelect.innerHTML.includes('LP')) {
+                updateTomSelect('res-material-type', '<option value="">Select...</option><option value="LP">LP</option><option value="NT">NT</option><option value="WB">WB</option><option value="RB">RB</option><option value="Assessment">Assessment</option>');
+            }
+        }
+        else if(cat === 'National Reading Program (NRP)') {
+            toShow.push('group-material-type', 'group-school-level', 'group-title', 'group-quarter-week', 'group-quarter', 'group-week', 'group-learning-area', 'group-grade');
+            const mtSelect = document.getElementById('res-material-type');
+            if(!mtSelect.innerHTML.includes('Lesson Script')) {
+                updateTomSelect('res-material-type', '<option value="">Select...</option><option value="Lesson Script">Lesson Script</option><option value="Intervention">Intervention</option><option value="Enhancement">Enhancement</option><option value="Consolidated">Consolidated</option>');
+            }
+            const laSelect = document.getElementById('res-learning-area');
+            if(cat === 'National Reading Program (NRP)' && laSelect.value !== 'Reading') {
+                if(!laSelect.innerHTML.includes('Reading')) {
+                   const opt = document.createElement('option'); opt.value = 'Reading'; opt.text = 'Reading'; laSelect.add(opt);
+                }
+                if(laSelect.tomselect) laSelect.tomselect.setValue('Reading'); else laSelect.value = 'Reading';
+            }
+        }
+    }
+    
+    uploadDynamicGroups.forEach(id => {
+        const el = document.getElementById(id);
+        if(el) {
+            if(toShow.includes(id)) {
+                if(id==='group-quarter' || id==='group-week') el.style.display = 'block'; 
+                else if(id==='group-quarter-week') el.style.display = 'flex';
+                else el.style.display = 'block';
+            } else el.style.display = 'none';
+        }
+    });
+
+    const resFile = document.getElementById('res-file');
+    const materialType = document.getElementById('res-material-type').value;
+    if(cat === 'Contextualized Learning Resources (CLRs)' && type === 'Digital Learning Resources' && materialType && materialType !== '') {
+        if(resFile) resFile.removeAttribute('accept');
+        if(resFile && !resFile.value) document.getElementById('drop-zone-text').innerText = 'Drag & Drop File or Click to Browse';
+    } else {
+        if(resFile) resFile.setAttribute('accept', '.pdf');
+        if(resFile && !resFile.value) document.getElementById('drop-zone-text').innerText = 'Drag & Drop PDF or Click to Browse';
+    }
+}
+
+// --- Dynamic Competency DB Lookup Logic ---
+function updateDynamicOptions(endpoint, elementId, defaultOptionText, skipValCheck=false) {
+    const select = document.getElementById(elementId);
+    if(!select) return;
+    
+    // CAPTURE CURRENT VALUE BEFORE CLEARING
+    const currentVal = select.value;
+    
+    // If we already have a selection, and it's not a master reset, don't clear it
+    if(currentVal && currentVal !== "" && !skipValCheck) return Promise.resolve();
+
+    const spin = document.getElementById(`spin-${elementId}`);
+    if(spin) spin.classList.remove('hidden');
+
+    if(!skipValCheck) updateTomSelect(elementId, `<option value="">${defaultOptionText}</option>`);
+    
+    return fetch(endpoint).then(r=>r.json()).then(data => {
+        if(spin) spin.classList.add('hidden');
+        if(data.success && data.data) {
+            let options = [];
+            if(elementId === 'res-learning-area') options = data.data.subjects;
+            else if(elementId === 'res-grade') options = data.data.grades;
+            else if(elementId === 'res-quarter') options = data.data.quarters;
+            else if(elementId === 'res-week') options = data.data.weeks;
+            
+            let html = `<option value="">${defaultOptionText}</option>`;
+            options.forEach(opt => {
+                if(opt) html += `<option value="${opt}">${opt}</option>`;
+            });
+            if(elementId === 'res-grade') html += `<option value="Others...">Others... (Type below)</option>`;
+            
+            updateTomSelect(elementId, html, currentVal);
+
+            if(data.data.competencies && data.data.competencies.length > 0) {
+                let compHtml = '<option value="">Select MELC...</option>';
+                data.data.competencies.forEach(c => {
+                    compHtml += `<option value="${c.id}" data-melc="${c.melc}" data-content="${c.content_std||''}" data-perf="${c.performance_std||''}" data-code="${c.code||''}">${c.melc} (Code: ${c.code||'N/A'})</option>`;
+                });
+                
+                updateTomSelect('res-comp-select', compHtml);
+                
+                // Auto-fill if exactly 1
+                if(data.data.competencies.length === 1) {
+                    const compSelect = document.getElementById('res-comp-select');
+                    if(compSelect.tomselect) compSelect.tomselect.setValue(data.data.competencies[0].id);
+                    compSelect.dispatchEvent(new Event('change'));
+                }
+            }
+        }
+    }).catch(e => {
+        if(spin) spin.classList.add('hidden');
+    });
+}
+
+function triggerDynamicUpdate(sourceId) {
+    const subject = document.getElementById('res-learning-area').value;
+    const grade = document.getElementById('res-grade').value;
+    const quarter = document.getElementById('res-quarter').value;
+    const week = document.getElementById('res-week').value;
+    const schoolLevel = document.getElementById('res-school-level').value;
+    
+    let url = `api/competencies.php?action=unique_values&subject=${encodeURIComponent(subject)}&grade=${encodeURIComponent(grade)}&quarter=${encodeURIComponent(quarter)}&week=${encodeURIComponent(week)}&school_level=${encodeURIComponent(schoolLevel)}`;
+    
+    // HIERARCHY LOGIC: Only update fields BELOW the changed field
+    if(sourceId === 'res-school-level') {
+        // Reset everything below if school level changes
+        updateTomSelect('res-learning-area', '<option value="">Select Area...</option>');
+        updateTomSelect('res-grade', '<option value="">Select Grade...</option>');
+        updateTomSelect('res-quarter', '<option value="">Select Quarter...</option>');
+        updateTomSelect('res-week', '<option value="">Select Week...</option>');
+        updateDynamicOptions(url, 'res-learning-area', 'Select Area...', true);
+        updateDynamicOptions(url, 'res-grade', 'Select Grade...', true);
+    } else if(sourceId === 'res-learning-area') {
+        updateDynamicOptions(url, 'res-grade', 'Select Grade...');
+        updateDynamicOptions(url, 'res-quarter', 'Select Quarter...');
+    } else if(sourceId === 'res-grade') {
+        updateDynamicOptions(url, 'res-quarter', 'Select Quarter...');
+        updateDynamicOptions(url, 'res-week', 'Select Week...');
+    } else if(sourceId === 'res-quarter') {
+        updateDynamicOptions(url, 'res-week', 'Select Week...');
+    } else if(sourceId === 'res-week') {
+        updateDynamicOptions(url, 'res-comp-select', 'Select MELC...');
+    }
+}
+
+document.getElementById('res-school-level')?.addEventListener('change', () => triggerDynamicUpdate('res-school-level'));
+document.getElementById('res-learning-area')?.addEventListener('change', () => triggerDynamicUpdate('res-learning-area'));
+document.getElementById('res-grade')?.addEventListener('change', (e) => {
+    document.getElementById('res-grade-custom').style.display = e.target.value === 'Others...' ? 'block' : 'none';
+    triggerDynamicUpdate('res-grade');
+});
+document.getElementById('res-quarter')?.addEventListener('change', () => triggerDynamicUpdate('res-quarter'));
+document.getElementById('res-week')?.addEventListener('change', () => triggerDynamicUpdate('res-week'));
+
+// --- CSV Import ---
+window.importCompCSV = (input) => {
+    if (!input.files || !input.files[0]) return;
+    const file = input.files[0];
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const actionModal = document.getElementById('action-modal');
+    actionModal.classList.add('active');
+    actionModal.classList.remove('hidden');
+    document.getElementById('action-spinner').classList.remove('hidden');
+    document.getElementById('action-message').innerText = 'Importing CSV Data...';
+
+    fetch('api/competencies.php?action=import', {
+        method: 'POST',
+        body: formData
+    })
+    .then(r => r.json())
+    .then(data => {
+        document.getElementById('action-spinner').classList.add('hidden');
+        document.getElementById('action-check').classList.remove('hidden');
+        document.getElementById('action-message').innerText = data.success ? data.message : 'Error: ' + data.message;
+        document.getElementById('close-action-modal').classList.remove('hidden');
+        if(data.success) {
+            loadCompetencies();
+            // Refresh to update all filter dropdowns
+            setTimeout(() => location.reload(), 2000);
+        }
+    })
+    .catch(e => {
+        document.getElementById('action-spinner').classList.add('hidden');
+        document.getElementById('action-message').innerText = 'Network error during import.';
+        document.getElementById('close-action-modal').classList.remove('hidden');
+    });
+};
+
+window.clearAllCompetencies = () => {
+    if(confirm("CRITICAL WARNING: This will delete ALL learning competencies from the database. This action cannot be undone. Are you absolutely sure?")) {
+        const actionModal = document.getElementById('action-modal');
+        actionModal.classList.add('active');
+        actionModal.classList.remove('hidden');
+        document.getElementById('action-spinner').classList.remove('hidden');
+        document.getElementById('action-message').innerText = 'Clearing Database...';
+
+        fetch('api/competencies.php?action=truncate')
+        .then(r => r.json())
+        .then(data => {
+            document.getElementById('action-spinner').classList.add('hidden');
+            document.getElementById('action-check').classList.remove('hidden');
+            document.getElementById('action-message').innerText = data.success ? data.message : 'Error: ' + data.message;
+            document.getElementById('close-action-modal').classList.remove('hidden');
+            if(data.success) {
+                loadCompetencies();
+                setTimeout(() => location.reload(), 2000);
+            }
+        });
+    }
+};
+
+document.getElementById('res-comp-select')?.addEventListener('change', (e) => {
+    const sel = e.target.options[e.target.selectedIndex];
+    if(sel && sel.value !== "") {
+        document.getElementById('res-content-std').value = sel.getAttribute('data-content') || '';
+        document.getElementById('res-perf-std').value = sel.getAttribute('data-perf') || '';
+        document.getElementById('res-code').value = sel.getAttribute('data-code') || '';
+        document.getElementById('res-comp').value = sel.getAttribute('data-melc') || '';
+    } else {
+        document.getElementById('res-content-std').value = '';
+        document.getElementById('res-perf-std').value = '';
+        document.getElementById('res-code').value = '';
+        document.getElementById('res-comp').value = '';
+    }
+});
+
+// Run once to initialize generic lists
+updateDynamicOptions('api/competencies.php?action=unique_values', 'res-learning-area', 'Select Area...', true);
+
+
+// --- Update Comp Filters ---
+window.clearCompFilters = () => {
+    document.getElementById('comp-filter-grade').value = '';
+    document.getElementById('comp-filter-subject').value = '';
+    document.getElementById('comp-filter-quarter').value = '';
+    document.getElementById('comp-filter-week').value = '';
+    document.getElementById('comp-search').value = '';
+    window.compState.search = '';
+    window.compState.grade = '';
+    window.compState.subject = '';
+    window.compState.quarter = '';
+    window.compState.week = '';
+    window.compState.page = 1;
+    loadCompetencies();
+};
+
+const filterElementsMap = {'comp-filter-grade':'grade', 'comp-filter-subject':'subject', 'comp-filter-quarter':'quarter', 'comp-filter-week':'week'};
+Object.keys(filterElementsMap).forEach(id => {
+    document.getElementById(id)?.addEventListener('change', (e) => {
+        window.compState[filterElementsMap[id]] = e.target.value;
+        window.compState.page = 1;
+        loadCompetencies();
+    });
+});
+
+fetch('api/competencies.php?action=unique_values').then(r=>r.json()).then(data => {
+    if(data.success && data.data) {
+        data.data.grades.forEach(g => document.getElementById('comp-filter-grade').innerHTML += `<option value="${g}">${g}</option>`);
+        data.data.subjects.forEach(s => document.getElementById('comp-filter-subject').innerHTML += `<option value="${s}">${s}</option>`);
+        data.data.quarters.forEach(q => document.getElementById('comp-filter-quarter').innerHTML += `<option value="${q}">${q}</option>`);
+        data.data.weeks.forEach(w => document.getElementById('comp-filter-week').innerHTML += `<option value="${w}">${w}</option>`);
+    }
+});
+
+
+
+
 

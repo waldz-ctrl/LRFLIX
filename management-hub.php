@@ -57,6 +57,7 @@ if (!isAdmin()) {
         <button class="btn btn-primary tab-btn" data-target="upload-section">Upload Resource</button>
         <button class="btn btn-secondary tab-btn" data-target="manage-res-section">Manage Resources</button>
         <button class="btn btn-secondary tab-btn" data-target="manage-usr-section">Manage Users</button>
+        <button class="btn btn-secondary tab-btn" data-target="comp-section">Manage Competencies</button>
         <button class="btn btn-secondary tab-btn" data-target="analytics-section"><i class="fas fa-chart-line"></i> Analytics Dashboard</button>
         <button class="btn btn-secondary tab-btn" data-target="feedbacks-section"><i class="fas fa-comments"></i> Feedbacks</button>
     </div>
@@ -69,31 +70,100 @@ if (!isAdmin()) {
             <form id="upload-form" class="auth-box" style="max-width: 100%; border:none; background: transparent; padding:0; display:grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 15px 25px;">
                 <input type="hidden" id="resource_id" value="">
                 
-                <div class="input-group" style="padding: 0 10px !important;">
+                <div class="input-group dynamic-field-group" id="group-category" style="padding: 0 10px !important;">
                     <label>LR Category</label>
                     <select id="res-category" required style="width: 100%; padding: 0.9rem; border-radius: 4px; background: #333; color: white;">
                         <option value="">Select Category...</option>
-                        <option value="MATATAG Materials">MATATAG Materials</option>
-                        <option value="National Reading Program">National Reading Program</option>
-                        <option value="NLC 2024 Materials">NLC 2024 Materials</option>
-                        <option value="Contextualized Learning Resources">Contextualized Learning Resources</option>
-                        <option value="Localized Graphics/Illustrations">Localized Graphics/Illustrations</option>
-                        <option value="Audio Learning Resources">Audio Learning Resources</option>
-                        <option value="Video Learning Resources">Video Learning Resources</option>
-                        <option value="Self-Learning Modules">Self-Learning Modules</option>
-                        <option value="Learning Activity Sheets">Learning Activity Sheets</option>
-                        <option value="Digitalized Learning Resources">Digitalized Learning Resources</option>
+                        <option value="MATATAG Curriculum Resources">MATATAG Curriculum Resources</option>
+                        <option value="K to 12 Curriculum Resources">K to 12 Curriculum Resources</option>
+                        <option value="Contextualized Learning Resources (CLRs)">Contextualized Learning Resources (CLRs)</option>
+                        <option value="National Learning Camp (NLC)">National Learning Camp (NLC)</option>
+                        <option value="National Reading Program (NRP)">National Reading Program (NRP)</option>
                     </select>
                 </div>
-                <div class="input-group" style="padding: 0 10px;">
+
+                <div class="input-group dynamic-field-group" id="group-type" style="padding: 0 10px !important; display:none;">
+                    <label id="label-type">LR Type</label>
+                    <select id="res-type" style="width: 100%; padding: 0.9rem; border-radius: 4px; background: #333; color: white;">
+                        <option value="">Select...</option>
+                    </select>
+                </div>
+
+                <div class="input-group dynamic-field-group" id="group-curriculum" style="padding: 0 10px !important; display:none;">
+                    <label>Curriculum</label>
+                    <select id="res-curriculum" style="width: 100%; padding: 0.9rem; border-radius: 4px; background: #333; color: white;">
+                        <option value="">Select Curriculum...</option>
+                        <option value="MATATAG">MATATAG</option>
+                        <option value="K to 12">K to 12</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+
+                <div class="input-group dynamic-field-group" id="group-school-level" style="padding: 0 10px !important; display:none;">
+                    <label>School Level</label>
+                    <select id="res-school-level" style="width: 100%; padding: 0.9rem; border-radius: 4px; background: #333; color: white;">
+                        <option value="">Select...</option>
+                        <option value="Elementary">Elementary</option>
+                        <option value="Secondary">Secondary</option>
+                    </select>
+                </div>
+                
+                <div class="input-group dynamic-field-group" id="group-camp-type" style="padding: 0 10px !important; display:none;">
+                    <label>Camp Type</label>
+                    <select id="res-camp-type" style="width: 100%; padding: 0.9rem; border-radius: 4px; background: #333; color: white;">
+                        <option value="">Select...</option>
+                        <option value="Intervention">Intervention</option>
+                        <option value="Enhancement">Enhancement</option>
+                        <option value="Consolidation">Consolidation</option>
+                    </select>
+                </div>
+
+                <div class="input-group dynamic-field-group" id="group-material-type" style="padding: 0 10px !important; display:none;">
+                    <label id="label-material-type">Material Type</label>
+                    <select id="res-material-type" style="width: 100%; padding: 0.9rem; border-radius: 4px; background: #333; color: white;">
+                        <option value="">Select...</option>
+                        <!-- Options dynamically loaded -->
+                    </select>
+                </div>
+
+                <div class="input-group dynamic-field-group" id="group-learning-area" style="padding: 0 10px !important; display:none;">
+                    <label id="label-learning-area">Learning Area (Subject) <i class="fas fa-spinner fa-spin hidden" id="spin-res-learning-area"></i></label>
+                    <select id="res-learning-area" style="width: 100%; padding: 0.9rem; border-radius: 4px; background: #333; color: white;">
+                        <option value="">Select Area...</option>
+                    </select>
+                </div>
+                
+                <div class="input-group dynamic-field-group" id="group-component" style="padding: 0 10px !important; display:none;">
+                    <label>Component</label>
+                    <input type="text" id="res-component" style="padding:12px 15px;" placeholder="For TechPro, TLE, EPP">
+                </div>
+
+                <div class="input-group dynamic-field-group" id="group-title" style="padding: 0 10px !important; display:none;">
                     <label>Title</label>
-                    <input type="text" id="res-title" required style="padding:12px 15px;">
+                    <input type="text" id="res-title" style="padding:12px 15px;">
                 </div>
-                <div class="input-group" id="authors-group" style="padding: 0 10px !important;">
+
+                <div class="input-group dynamic-field-group" id="group-grade" style="padding: 0 10px !important; display:none;">
+                    <label>Grade Level <i class="fas fa-spinner fa-spin hidden" id="spin-res-grade"></i></label>
+                    <select id="res-grade" style="width: 100%; padding: 0.9rem; border-radius: 4px; background: #333; color: white;">
+                        <option value="">Select Grade...</option>
+                    </select>
+                    <input type="text" id="res-grade-custom" style="padding:12px 15px; margin-top:5px; display:none;" placeholder="Enter custom grade level">
+                </div>
+                
+                <div class="input-group dynamic-field-group" id="group-module-no" style="padding: 0 10px !important; display:none;">
+                    <label>Module No.</label>
+                    <input type="text" id="res-module-no" style="padding:12px 15px;">
+                </div>
+
+                <div class="input-group dynamic-field-group" id="group-authors" style="padding: 0 10px !important; display:none;">
                     <label>Author(s) <button type="button" id="add-author-btn" style="background:transparent; color: var(--accent-color); border:none; cursor:pointer;">+ Add Another</button></label>
-                    <input type="text" class="res-author" placeholder="Author 1" required style="margin-bottom: 5px;">
+                    <div id="authors-group">
+                        <input type="text" class="res-author" placeholder="Author 1" style="margin-bottom: 5px; width:100%;">
+                    </div>
                 </div>
-                <div class="input-group" style="padding: 0 10px !important;">
+
+                <div class="input-group dynamic-field-group" id="group-language" style="padding: 0 10px !important; display:none;">
                     <label>Language</label>
                     <select id="res-language" style="width: 100%; padding: 0.9rem; border-radius: 4px; background: #333; color: white;">
                         <option value="">Select...</option>
@@ -102,119 +172,62 @@ if (!isAdmin()) {
                         <option value="Filipino">Filipino</option>
                     </select>
                 </div>
-                <div class="input-group" style="padding: 0 10px !important;">
-                    <label>Grade Level</label>
-                    <select id="res-grade" style="width: 100%; padding: 0.9rem; border-radius: 4px; background: #333; color: white;">
-                        <option value="">Select...</option>
-                        <option value="SNED">SNED</option>
-                        <option value="ALS">ALS</option>
-                        <option value="KS-1">KS-1</option>
-                        <option value="KS-2">KS-2</option>
-                        <option value="KS-3">KS-3</option>
-                        <option value="KS-4">KS-4</option>
-                        <option value="Kinder">Kinder</option>
-                        <option value="Grade 1">Grade 1</option>
-                        <option value="Grade 2">Grade 2</option>
-                        <option value="Grade 3">Grade 3</option>
-                        <option value="Grade 4">Grade 4</option>
-                        <option value="Grade 5">Grade 5</option>
-                        <option value="Grade 6">Grade 6</option>
-                        <option value="Grade 7">Grade 7</option>
-                        <option value="Grade 8">Grade 8</option>
-                        <option value="Grade 9">Grade 9</option>
-                        <option value="Grade 10">Grade 10</option>
-                        <option value="Grade 11">Grade 11</option>
-                        <option value="Grade 12">Grade 12</option>
-                    </select>
-                </div>
                 
-                <div style="display:flex; gap:10px; padding: 0 10px !important;">
-                    <div class="input-group" style="flex:1;">
-                        <label>Quarter</label>
+                <div style="display:none; gap:10px; padding: 0 10px !important;grid-column: span 1;" class="dynamic-field-group" id="group-quarter-week">
+                    <div class="input-group" style="flex:1; display:none;" id="group-quarter">
+                        <label>Quarter <i class="fas fa-spinner fa-spin hidden" id="spin-res-quarter"></i></label>
                         <select id="res-quarter" style="width: 100%; padding: 0.9rem; border-radius: 4px; background: #333; color: white;">
-                            <option value="">Select...</option>
-                            <option value="1">1</option>
-                            <option value="2">2</option>
-                            <option value="3">3</option>
-                            <option value="4">4</option>
+                            <option value="">Select Quarter...</option>
                         </select>
                     </div>
-                    <div class="input-group" style="flex:1;">
-                        <label>Week</label>
-                        <input type="number" id="res-week" min="1" max="10">
+                    <div class="input-group" style="flex:1; display:none;" id="group-week">
+                        <label>Week <i class="fas fa-spinner fa-spin hidden" id="spin-res-week"></i></label>
+                        <select id="res-week" style="width: 100%; padding: 0.9rem; border-radius: 4px; background: #333; color: white;">
+                            <option value="">Select Week...</option>
+                        </select>
                     </div>
                 </div>
 
-                <div class="input-group" style="padding: 0 10px !important;">
-                    <label>Learning Area</label>
-                    <select id="res-learning-area" style="width: 100%; padding: 0.9rem; border-radius: 4px; background: #333; color: white;">
-                        <option value="">Select...</option>
-                        <option value="English">English</option>
-                        <option value="Math">Math</option>
-                        <option value="Science">Science</option>
-                        <option value="Filipino">Filipino</option>
-                        <option value="MAKABANSA">MAKABANSA</option>
-                        <option value="GMRC">GMRC</option>
-                        <option value="TLE">TLE</option>
-                        <option value="MAPEH">MAPEH</option>
-                        <option value="Araling Panlipunan">Araling Panlipunan</option>
+                <div class="input-group dynamic-field-group" id="group-comp" style="grid-column: 1 / -1; padding: 0 10px !important; display:none;">
+                    <label>Learning Competency (MELC)</label>
+                    <select id="res-comp-select" style="width: 100%; padding: 0.9rem; border-radius: 4px; background: #333; color: white;">
+                        <option value="">Select MELC...</option>
                     </select>
+                    <input type="hidden" id="res-comp" value="">
                 </div>
-                <div class="input-group" style="padding: 0 10px !important;">
-                    <label>Resource Type</label>
-                    <select id="res-type" style="width: 100%; padding: 0.9rem; border-radius: 4px; background: #333; color: white;">
-                        <option value="">Select...</option>
-                        <option value="Self-Learning Module">Self-Learning Module</option>
-                        <option value="Strategic Intervention Material">Strategic Intervention Material</option>
-                        <option value="Learning Activity Sheet">Learning Activity Sheet</option>
-                        <option value="Worksheet">Worksheet</option>
-                        <option value="Workbook">Workbook</option>
-                        <option value="Storybook">Storybook</option>
-                    </select>
+                
+                <div class="input-group dynamic-field-group" id="group-code" style="padding: 0 10px !important; display:none;">
+                    <label>Code</label>
+                    <input type="text" id="res-code" style="padding:12px 15px;" readonly>
                 </div>
-                <div class="input-group" style="padding: 0 10px !important;">
+                
+                <div class="input-group dynamic-field-group" id="group-content-std" style="grid-column: 1 / -1; padding: 0 10px !important; display:none;">
+                    <label>Content Standards</label>
+                    <textarea id="res-content-std" rows="2" readonly style="background:#222;"></textarea>
+                </div>
+                <div class="input-group dynamic-field-group" id="group-perf-std" style="grid-column: 1 / -1; padding: 0 10px !important; display:none;">
+                    <label>Performance Standards</label>
+                    <textarea id="res-perf-std" rows="2" readonly style="background:#222;"></textarea>
+                </div>
+
+                <div class="input-group dynamic-field-group" id="group-year" style="padding: 0 10px !important; display:none;">
                     <label>Year Published</label>
                     <select id="res-year" style="width: 100%; padding: 0.9rem; border-radius: 4px; background: #333; color: white;">
                         <option value="">Select...</option>
-                        <option value="Before 2019">Before 2019</option>
-                        <option value="2019">2019</option>
-                        <option value="2020">2020</option>
-                        <option value="2021">2021</option>
-                        <option value="2022">2022</option>
-                        <option value="2023">2023</option>
-                        <option value="2024">2024</option>
-                        <option value="2025">2025</option>
-                        <option value="2026">2026</option>
+                        <?php for($y=date('Y'); $y>=2010; $y--) echo "<option value='$y'>$y</option>"; ?>
                     </select>
                 </div>
 
-                <div class="input-group" style="grid-column: 1 / -1; padding: 0 10px !important;">
-                    <label>Content Standards</label>
-                    <textarea id="res-content-std" rows="2"></textarea>
-                </div>
-                <div class="input-group" style="grid-column: 1 / -1; padding: 0 10px !important;">
-                    <label>Performance Standards</label>
-                    <textarea id="res-perf-std" rows="2"></textarea>
-                </div>
-
-                <div class="input-group" style="grid-column: 1 / -1; padding: 0 10px !important;">
-                    <label>Competencies</label>
-                    <div id="competencies-group" style="display:flex; flex-direction:column; gap:8px;">
-                        <input type="text" class="res-comp" placeholder="e.g. math-grade1, basic-addition" style="width:100%;">
-                    </div>
-                    <button type="button" id="add-comp-btn" class="btn btn-secondary" style="margin-top:10px; font-size: 0.8rem; padding: 6px 12px;"><i class="fas fa-plus"></i> Add Competency</button>
-                </div>
-                
-                <div class="input-group" style="grid-column: 1 / -1; padding: 0 10px !important;">
+                <div class="input-group dynamic-field-group" id="group-desc" style="grid-column: 1 / -1; padding: 0 10px !important; display:none;">
                     <label>Description</label>
-                    <textarea id="res-desc" rows="2" required></textarea>
+                    <textarea id="res-desc" rows="2"></textarea>
                 </div>
                 
-                <div class="input-group" style="grid-column: 1 / -1; padding: 15px 10px !important;">
+                <div class="input-group" style="grid-column: 1 / -1; padding: 15px 10px !important;" id="group-file">
                     <div id="drop-zone" style="border: 2px dashed #444; border-radius: 8px; padding: 20px 10px; text-align: center; background: #1a1a1a; cursor: pointer; transition: 0.3s; position: relative; margin-bottom: 15px;">
                         <label style="cursor: pointer; display: block; width: 100%;"><i class="fas fa-cloud-upload-alt" style="font-size: 1.5rem; margin-bottom: 10px; color: #aaa;"></i><br>
-                            <span id="drop-zone-text" style="color: #888; font-size: 0.95rem;">Drag & Drop PDF or Click to Browse</span>
-                            <input type="file" id="res-file" accept="application/pdf" style="display: none;">
+                            <span id="drop-zone-text" style="color: #888; font-size: 0.95rem;">Drag & Drop File or Click to Browse</span>
+                            <input type="file" id="res-file" accept="application/pdf,image/*,video/*,audio/*,.ppt,.pptx" style="display: none;">
                         </label>
                         <button id="remove-file-btn" type="button" class="hidden" style="position:absolute; bottom:15px; right:15px; background:rgba(229, 9, 20, 0.4); border:1px solid #e50914; border-radius:50%; width:32px; height:32px; border:none; color:white; cursor:pointer; display:flex; align-items:center; justify-content:center; z-index:10;"><i class="fas fa-times"></i></button>
                     </div>
@@ -256,6 +269,51 @@ if (!isAdmin()) {
             </div>
             <div id="resources-pagination" style="display:flex; justify-content:flex-end; gap:8px; margin-top:1rem; align-items:center;"></div>
         </div> <!-- End Manage Res Tab -->
+
+        <!-- Manage Competencies Tab -->
+        <div id="comp-section" class="admin-card fade-in tab-content" style="display:none;">
+            <h2>Manage Competencies</h2>
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; margin-bottom:1rem; gap:12px;">
+                <input type="text" id="comp-search" placeholder="Search by MELC, Code, Subject..."
+                    style="flex:1; min-width:200px; padding:0.8rem 0.9rem; border-radius:6px; border:1px solid #333; background:#222; color:white;">
+                <select id="comp-filter-grade" style="padding:0.8rem 0.9rem; border-radius:6px; background:#222; border:1px solid #333; color:white;">
+                    <option value="">All Grades</option>
+                </select>
+                <select id="comp-filter-subject" style="padding:0.8rem 0.9rem; border-radius:6px; background:#222; border:1px solid #333; color:white;">
+                    <option value="">All Subjects</option>
+                </select>
+                <select id="comp-filter-quarter" style="padding:0.8rem 0.9rem; border-radius:6px; background:#222; border:1px solid #333; color:white;">
+                    <option value="">All Quarters</option>
+                </select>
+                <select id="comp-filter-week" style="padding:0.8rem 0.9rem; border-radius:6px; background:#222; border:1px solid #333; color:white;">
+                    <option value="">All Weeks</option>
+                </select>
+                <button class="btn btn-secondary" onclick="clearCompFilters()"><i class="fas fa-eraser"></i> Clear Filters</button>
+                <button class="btn btn-danger" onclick="clearAllCompetencies()"><i class="fas fa-trash-alt"></i> Clear All Data</button>
+                <button class="btn btn-secondary" onclick="document.getElementById('comp-csv-upload').click();"><i class="fas fa-file-csv"></i> Import CSV</button>
+                <input type="file" id="comp-csv-upload" accept=".csv" style="display:none;" onchange="importCompCSV(this)">
+                <button class="btn btn-primary" onclick="openCompModal();"><i class="fas fa-plus"></i> Add</button>
+            </div>
+            <div style="overflow-x:auto;">
+                <table class="data-table" id="comp-table">
+                    <thead>
+                        <tr>
+                            <th>Code</th>
+                            <th>Subject</th>
+                            <th>School Level</th>
+                            <th>Grade Level</th>
+                            <th>Quarter</th>
+                            <th>MELC</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Dynamic rows -->
+                    </tbody>
+                </table>
+            </div>
+            <div id="comp-pagination" style="display:flex; justify-content:flex-end; gap:8px; margin-top:1rem; align-items:center;"></div>
+        </div>
 
         <!-- Manage Users Tab -->
         <div id="manage-usr-section" class="admin-card fade-in tab-content" style="display:none;">
@@ -503,6 +561,70 @@ if (!isAdmin()) {
                 <button class="btn btn-secondary" onclick="document.getElementById('clear-modal').classList.add('hidden'); document.getElementById('clear-modal').classList.remove('active');" style="flex:1;">Keep Data</button>
                 <button class="btn btn-primary" id="confirm-clear-btn" style="flex:1;">Yes, Clear All</button>
             </div>
+        </div>
+    </div>
+
+    <!-- Competency Form Modal -->
+    <div id="comp-modal" class="modal-overlay hidden">
+        <div class="modal-content" style="max-width:600px; padding:2rem;">
+            <button class="modal-close" onclick="closeCompModal()">&times;</button>
+            <h2 id="comp-modal-title" style="margin-bottom:1.5rem;">Add New Competency</h2>
+            <form id="comp-form" style="display:flex; flex-direction:column; gap:15px;">
+                <input type="hidden" id="comp-id" value="">
+                
+                <div style="display:flex; gap:15px;">
+                    <div class="input-group" style="flex:1;">
+                        <label>Curriculum</label>
+                        <input type="text" id="comp-curriculum" style="width:100%; padding:0.8rem; border-radius:6px; background:#333; color:white; border:1px solid #444;">
+                    </div>
+                    <div class="input-group" style="flex:1;">
+                        <label>Grade Level</label>
+                        <input type="text" id="comp-grade" style="width:100%; padding:0.8rem; border-radius:6px; background:#333; color:white; border:1px solid #444;">
+                    </div>
+                </div>
+
+                <div style="display:flex; gap:15px;">
+                    <div class="input-group" style="flex:1;">
+                        <label>Subject</label>
+                        <input type="text" id="comp-subject" style="width:100%; padding:0.8rem; border-radius:6px; background:#333; color:white; border:1px solid #444;">
+                    </div>
+                    <div class="input-group" style="flex:1;">
+                        <label>Quarter/Term</label>
+                        <input type="text" id="comp-quarter" style="width:100%; padding:0.8rem; border-radius:6px; background:#333; color:white; border:1px solid #444;">
+                    </div>
+                </div>
+
+                <div style="display:flex; gap:15px;">
+                    <div class="input-group" style="flex:1;">
+                        <label>Week</label>
+                        <input type="text" id="comp-week" style="width:100%; padding:0.8rem; border-radius:6px; background:#333; color:white; border:1px solid #444;">
+                    </div>
+                    <div class="input-group" style="flex:1;">
+                        <label>Code</label>
+                        <input type="text" id="comp-code" style="width:100%; padding:0.8rem; border-radius:6px; background:#333; color:white; border:1px solid #444;">
+                    </div>
+                </div>
+
+                <div class="input-group">
+                    <label>MELC (Most Essential Learning Competency)</label>
+                    <textarea id="comp-melc" rows="2" style="width:100%; padding:0.8rem; border-radius:6px; background:#333; color:white; border:1px solid #444;"></textarea>
+                </div>
+
+                <div class="input-group">
+                    <label>Content Standards</label>
+                    <textarea id="comp-content-std" rows="2" style="width:100%; padding:0.8rem; border-radius:6px; background:#333; color:white; border:1px solid #444;"></textarea>
+                </div>
+                
+                <div class="input-group">
+                    <label>Performance Standards</label>
+                    <textarea id="comp-perf-std" rows="2" style="width:100%; padding:0.8rem; border-radius:6px; background:#333; color:white; border:1px solid #444;"></textarea>
+                </div>
+
+                <div style="margin-top:1rem; display:flex; gap:15px;">
+                    <button type="button" class="btn btn-secondary" onclick="closeCompModal()" style="flex:1;">Cancel</button>
+                    <button type="submit" class="btn btn-primary" style="flex:1;"><i class="fas fa-save"></i> Save Competency</button>
+                </div>
+            </form>
         </div>
     </div>
 
