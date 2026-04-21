@@ -243,10 +243,14 @@ if (!isAdmin()) {
                 </div>
 
                 <div class="input-group dynamic-field-group" id="group-comp" style="grid-column: 1 / -1; padding: 0 10px !important; display:none;">
-                    <label>Learning Competency (MELC)</label>
-                    <select id="res-comp-select" style="width: 100%; padding: 0.9rem; border-radius: 4px; background: #333; color: white;">
-                        <option value="">Select MELC...</option>
-                    </select>
+                    <label>Learning Competency (MELC) <button type="button" id="add-comp-btn" style="background:transparent; color: var(--accent-color); border:none; cursor:pointer;">+ Add Another</button></label>
+                    <div id="competencies-group">
+                        <div class="comp-select-wrapper" style="margin-bottom: 10px; position: relative;">
+                            <select class="res-comp-select" id="res-comp-select" style="width: 100%; padding: 0.9rem; border-radius: 4px; background: #333; color: white;">
+                                <option value="">Select MELC...</option>
+                            </select>
+                        </div>
+                    </div>
                     <input type="hidden" id="res-comp" value="">
                 </div>
                 
@@ -287,8 +291,7 @@ if (!isAdmin()) {
                     </div>
                     
                     <div style="display:flex; flex-direction:row; gap:15px; margin-top:15px; align-items:center;">
-                        <button type="button" id="cancel-edit-btn" class="btn btn-secondary hidden" onclick="cancelResourceEdit()" style="flex:1; height:40px; font-size:0.9rem; margin:0;"><i class="fas fa-times"></i> Cancel Edit</button>
-                        <button type="button" id="delete-res-btn" class="btn btn-danger hidden" onclick="confirmDeleteResource()" style="flex:1; height:40px; font-size:0.9rem; margin:0;"><i class="fas fa-trash-alt"></i> Delete</button>
+                        <button type="button" id="cancel-edit-btn" class="btn btn-secondary" onclick="resetUploadForm()" style="flex:1; height:40px; font-size:0.9rem; margin:0;"><i class="fas fa-times-circle"></i> Cancel</button>
                         <button type="button" id="clear-form-btn" class="btn btn-secondary" onclick="confirmClearForm()" style="flex:1; height:40px; font-size:0.9rem; margin:0;"><i class="fas fa-eraser"></i> Clear</button>
                         <button type="submit" class="btn btn-primary" id="upload-submit-btn" style="flex:1; height:40px; font-size:0.9rem; margin:0;"><i class="fas fa-plus"></i> Submit Resource</button>
                     </div>

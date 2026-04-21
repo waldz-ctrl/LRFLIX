@@ -96,11 +96,14 @@ if ($action === 'get_by_code') {
         exit;
     }
     try {
-        $stmt = $pdo->prepare("SELECT * FROM learning_competencies WHERE code = ? LIMIT 1");
+        // Return ALL matches so the front-end can show a picker when duplicates exist
+        $stmt = $pdo->prepare("SELECT * FROM learning_competencies WHERE code = ? ORDER BY id ASC");
         $stmt->execute([$code]);
-        $comp = $stmt->fetch();
-        if ($comp) {
-            echo json_encode(['success' => true, 'data' => $comp]);
+        $rows = $stmt->fetchAll();
+        if (count($rows) === 1) {
+            echo json_encode(['success' => true, 'data' => $rows[0], 'multiple' => false]);
+        } elseif (count($rows) > 1) {
+            echo json_encode(['success' => true, 'data' => $rows, 'multiple' => true]);
         } else {
             echo json_encode(['success' => false, 'message' => 'No competency found for this code']);
         }
@@ -138,11 +141,40 @@ if ($action === 'unique_values') {
             return $stmt->fetchAll(PDO::FETCH_COLUMN);
         };
 
+        // Fetch competencies:
+        // - When week is set: try exact week match first; if no results (week stored as NULL/empty in DB), fall back to quarter-level
+        // - When quarter is set but no week: show quarter-level MELCs
         $competencies = [];
-        if (!empty($subject) && !empty($grade)) {
-            $stmt = $pdo->prepare("SELECT id, melc, content_std, performance_std, code FROM learning_competencies WHERE $whereClause ORDER BY melc ASC");
-            $stmt->execute($params);
-            $competencies = $stmt->fetchAll();
+        if (!empty($subject) && !empty($grade) && !empty($quarter)) {
+            if (!empty($week)) {
+                // Try week-specific first
+                $weekWhere = $whereClause;
+                $weekParams = $params;
+                $weekStmt = $pdo->prepare("SELECT id, melc, content_std, performance_std, code FROM learning_competencies WHERE $weekWhere ORDER BY melc ASC");
+                $weekStmt->execute($weekParams);
+                $competencies = $weekStmt->fetchAll();
+
+                // If no results with week filter, the week column may be empty/NULL for these rows — fall back to quarter-level
+                if (empty($competencies)) {
+                    // Build a quarter-only filter (drop week from where clause)
+                    $fallbackWhere = ["1=1"];
+                    $fallbackParams = [];
+                    if (!empty($subject))      { $fallbackWhere[] = "subject = ?";      $fallbackParams[] = $subject; }
+                    if (!empty($grade))        { $fallbackWhere[] = "grade_level = ?";  $fallbackParams[] = $grade; }
+                    if (!empty($quarter))      { $fallbackWhere[] = "quarter_term = ?"; $fallbackParams[] = $quarter; }
+                    if (!empty($school_level)) { $fallbackWhere[] = "school_level = ?"; $fallbackParams[] = $school_level; }
+                    if (!empty($curriculum))   { $fallbackWhere[] = "curriculum = ?";   $fallbackParams[] = $curriculum; }
+                    $fallbackClause = implode(" AND ", $fallbackWhere);
+                    $fbStmt = $pdo->prepare("SELECT id, melc, content_std, performance_std, code FROM learning_competencies WHERE $fallbackClause ORDER BY melc ASC");
+                    $fbStmt->execute($fallbackParams);
+                    $competencies = $fbStmt->fetchAll();
+                }
+            } else {
+                // No week selected — show quarter-level MELCs
+                $stmt = $pdo->prepare("SELECT id, melc, content_std, performance_std, code FROM learning_competencies WHERE $whereClause ORDER BY melc ASC");
+                $stmt->execute($params);
+                $competencies = $stmt->fetchAll();
+            }
         }
 
         echo json_encode(['success' => true, 'data' => [
