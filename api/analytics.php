@@ -34,15 +34,18 @@ function buildPeriodDataset(PDO $pdo, string $table, string $column, string $per
     switch ($period) {
         case 'day':
             for ($i = 0; $i < 24; $i++) {
-                $label = str_pad($i, 2, '0', STR_PAD_LEFT) . ':00';
+                $h = $i % 12;
+                if ($h == 0) $h = 12;
+                $ampm = $i < 12 ? 'AM' : 'PM';
+                $label = "$h $ampm";
                 $labels[] = $label;
                 $dataset[$label] = 0;
             }
             $dateCond = $target_date ? "DATE($column) = :target_date" : "DATE($column) = CURDATE()";
-            $sql = "SELECT DATE_FORMAT($column, '%H:00') as label, COUNT(*) as total
+            $sql = "SELECT DATE_FORMAT($column, '%H') as hour_val, COUNT(*) as total
                     FROM $table
                     WHERE $dateCond
-                    GROUP BY label";
+                    GROUP BY hour_val";
             break;
 
         case 'week':
@@ -91,7 +94,11 @@ function buildPeriodDataset(PDO $pdo, string $table, string $column, string $per
     }
 
     while ($row = $stmt->fetch()) {
-        $dataset[(string)$row['label']] = (int)$row['total'];
+        $h_int = (int)$row['hour_val'];
+        $h_disp = $h_int % 12;
+        if($h_disp == 0) $h_disp = 12;
+        $h_ampm = $h_int < 12 ? 'AM' : 'PM';
+        $dataset["$h_disp $h_ampm"] = (int)$row['total'];
     }
 
     $result = [];
@@ -163,7 +170,8 @@ echo json_encode([
         'resources' => $totalResources,
         'downloads' => $totalDownloads,
         'likes' => $totalLikes,
-        'visits' => $totalVisits
+        'visits' => $totalVisits,
+        'views' => $pdo->query("SELECT SUM(views_count) FROM resources")->fetchColumn() ?? 0
     ]
 ]);
 ?>

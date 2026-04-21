@@ -302,7 +302,7 @@ nav.scrolled { background-color: #141414; }
 .hero-buttons { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 1.5rem; }
 
 /* ── Row Sliders ─────────────────── */
-.row { padding: 1.5rem 4%; }
+.row { padding: 1.5rem 0; width: 100%; position: relative; }
 .row-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.8rem; }
 .row-header h2 { font-size: 1.25rem; }
 .row-posters {
@@ -335,6 +335,29 @@ nav.scrolled { background-color: #141414; }
     margin-bottom: 20px;
     flex-wrap: wrap;
     gap: 10px;
+}
+
+.cat-filter-select {
+    background: rgba(43, 43, 43, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #eee;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    outline: none;
+    cursor: pointer;
+    transition: all 0.2s;
+    min-width: 140px;
+}
+
+.cat-filter-select:hover {
+    background: rgba(60, 60, 60, 0.8);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.cat-filter-select:focus {
+    border-color: var(--red);
+    box-shadow: 0 0 0 2px rgba(229, 9, 20, 0.2);
 }
 
 /* ── Modal ─────────────────────── */

@@ -47,6 +47,8 @@ if ($action === 'list') {
     $subject = $_GET['subject'] ?? '';
     $quarter = $_GET['quarter'] ?? '';
     $week = $_GET['week'] ?? '';
+    $curriculum = $_GET['curriculum'] ?? '';
+    $school_level = $_GET['school_level'] ?? '';
 
     try {
         $params = [];
@@ -61,6 +63,8 @@ if ($action === 'list') {
         if (!empty($subject)) { $query .= " AND subject = ?"; $params[] = $subject; }
         if (!empty($quarter)) { $query .= " AND quarter_term = ?"; $params[] = $quarter; }
         if (!empty($week)) { $query .= " AND week = ?"; $params[] = $week; }
+        if (!empty($curriculum)) { $query .= " AND curriculum = ?"; $params[] = $curriculum; }
+        if (!empty($school_level)) { $query .= " AND school_level = ?"; $params[] = $school_level; }
 
         $countQuery = str_replace("SELECT *", "SELECT COUNT(*) as total", $query);
         $countStmt = $pdo->prepare($countQuery);
@@ -85,12 +89,35 @@ if ($action === 'list') {
     }
 }
 
+if ($action === 'get_by_code') {
+    $code = $_GET['code'] ?? '';
+    if (empty($code)) {
+        echo json_encode(['success' => false, 'message' => 'Code is required']);
+        exit;
+    }
+    try {
+        $stmt = $pdo->prepare("SELECT * FROM learning_competencies WHERE code = ? LIMIT 1");
+        $stmt->execute([$code]);
+        $comp = $stmt->fetch();
+        if ($comp) {
+            echo json_encode(['success' => true, 'data' => $comp]);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'No competency found for this code']);
+        }
+        exit;
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+        exit;
+    }
+}
+
 if ($action === 'unique_values') {
     $subject = $_GET['subject'] ?? '';
     $grade = $_GET['grade'] ?? '';
     $quarter = $_GET['quarter'] ?? '';
     $week = $_GET['week'] ?? '';
     $school_level = $_GET['school_level'] ?? '';
+    $curriculum = $_GET['curriculum'] ?? '';
 
     try {
         $where = ["1=1"];
@@ -101,6 +128,7 @@ if ($action === 'unique_values') {
         if (!empty($quarter)) { $where[] = "quarter_term = ?"; $params[] = $quarter; }
         if (!empty($week)) { $where[] = "week = ?"; $params[] = $week; }
         if (!empty($school_level)) { $where[] = "school_level = ?"; $params[] = $school_level; }
+        if (!empty($curriculum)) { $where[] = "curriculum = ?"; $params[] = $curriculum; }
 
         $whereClause = implode(" AND ", $where);
 
@@ -122,6 +150,8 @@ if ($action === 'unique_values') {
             'grades' => $getDistinct('grade_level'),
             'quarters' => $getDistinct('quarter_term'),
             'weeks' => $getDistinct('week'),
+            'school_levels' => $getDistinct('school_level'),
+            'curriculums' => $getDistinct('curriculum'),
             'competencies' => $competencies
         ]]);
         exit;

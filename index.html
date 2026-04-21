@@ -492,14 +492,34 @@
         </section>
 
         <!-- Category Full View -->
-        <div id="category-full-view" class="hidden" style="padding:110px 4% 50px;">
+        <div id="category-full-view" class="hidden" style="padding:110px 0 50px;">
             <div
-                style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:10px;">
-                <h2 id="category-full-title" style="font-size:clamp(1.4rem,4vw,2rem);">Category</h2>
-                <button class="btn btn-secondary" onclick="window.location.reload()"><i class="fas fa-arrow-left"></i>
+                style="display:flex; justify-content:space-between; align-items:center; margin-bottom:25px; flex-wrap:wrap; gap:15px; padding: 0 4%;">
+                <div style="display:flex; align-items:baseline; gap:15px; flex-wrap:wrap;">
+                    <h2 id="category-full-title" style="font-size:clamp(1.4rem,4vw,2rem); margin:0;">Category</h2>
+                    <div style="position:relative; min-width:250px;">
+                        <i class="fas fa-search" style="position:absolute; left:12px; top:50%; transform:translateY(-50%); color:#666; font-size:0.9rem;"></i>
+                        <input type="text" id="category-search" placeholder="Search in this category..." 
+                            style="width:100%; padding:10px 15px 10px 35px; border-radius:30px; border:1px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.05); color:white; outline:none; font-size:0.9rem; transition:0.3s;"
+                            onfocus="this.style.background='rgba(255,255,255,0.1)'; this.style.borderColor='var(--accent-color)'"
+                            onblur="this.style.background='rgba(255,255,255,0.05)'; this.style.borderColor='rgba(255,255,255,0.1)'">
+                    </div>
+                </div>
+                <button class="btn btn-secondary" onclick="closeCategoryView()"><i class="fas fa-arrow-left"></i>
                     Back</button>
             </div>
-            <div id="category-full-grid" style="display:flex; flex-wrap:wrap; gap:12px; justify-content:flex-start;">
+            
+            <!-- Filters Row -->
+            <div id="category-filters" style="display:flex; gap:10px; margin-bottom:25px; padding:0 4%; flex-wrap:wrap; align-items:center;">
+                <select id="filter-lr-type" class="cat-filter-select"><option value="">All LR Types</option></select>
+                <select id="filter-school-level" class="cat-filter-select"><option value="">All Levels</option></select>
+                <select id="filter-grade-level" class="cat-filter-select"><option value="">All Grades</option></select>
+                <select id="filter-quarter" class="cat-filter-select"><option value="">All Quarters</option></select>
+                <select id="filter-learning-area" class="cat-filter-select"><option value="">All Subject Areas</option></select>
+                <button class="btn btn-secondary" style="padding:8px 12px; font-size:0.8rem; background:transparent; border:1px solid #444;" onclick="resetCategoryFilters()"><i class="fas fa-sync-alt"></i> Reset</button>
+            </div>
+            <div id="category-full-grid" style="display:block; padding: 0;">
+                <!-- Rows will be injected here as block elements to ensure they take full width -->
             </div>
         </div>
 
@@ -642,6 +662,10 @@
                             Description</h3>
                         <p id="modal-description"
                             style="line-height:1.8; color:#eee; font-size:1rem; margin-bottom:24px;"></p>
+
+                        <div id="modal-dynamic-meta" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 24px;">
+                            <!-- Dynamic metadata fields will be injected here -->
+                        </div>
 
                         <h3
                             style="margin-bottom:10px; color:#e50914; font-size:0.85rem; text-transform:uppercase; letter-spacing:0.1em; font-weight:800;">
@@ -810,9 +834,13 @@
                         title="Fit to height"><i class="fas fa-arrows-alt-v"></i></button>
                 </div>
 
-
-                <button class="btn btn-primary" id="pdf-viewer-download" style="padding:7px 13px;"><i
-                        class="fas fa-download"></i> Download</button>
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <button class="btn btn-secondary" id="pdf-toggle-view" style="padding:7px 13px;" title="Switch between 1 or 2 page view">
+                        <i class="fas fa-columns"></i> <span id="pdf-view-mode-text">Two Page</span>
+                    </button>
+                    <button class="btn btn-primary" id="pdf-viewer-download" style="padding:7px 13px;"><i
+                            class="fas fa-download"></i> Download</button>
+                </div>
             </div>
             <!-- Canvas area -->
             <div id="pdf-viewer-container" onclick="event.stopPropagation();"

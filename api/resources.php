@@ -34,6 +34,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         echo json_encode(['success' => true, 'resources' => $resources]);
 
     }
+    elseif ($action === 'view') {
+        if (!isLoggedIn()) {
+            echo json_encode(['success' => false, 'message' => 'Unauthorized']);
+            exit;
+        }
+
+        $resId = (int)($_GET['id'] ?? 0);
+        $userId = $_SESSION['user_id'];
+
+        if($resId > 0) {
+            // Log view
+            $pdo->prepare("INSERT INTO views (user_id, resource_id) VALUES (?, ?)")->execute([$userId, $resId]);
+            // Increment global view count
+            $pdo->prepare("UPDATE resources SET views_count = views_count + 1 WHERE id = ?")->execute([$resId]);
+            echo json_encode(['success' => true]);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Invalid ID']);
+        }
+        exit;
+    }
     elseif ($action === 'related') {
         if (!isLoggedIn()) {
             echo json_encode(['success' => false, 'message' => 'Unauthorized']);
@@ -111,6 +131,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         echo json_encode(['success' => true, 'resources' => $resources]);
     }
 
+    elseif ($action === 'unique_values') {
+        if (!isAdmin()) {
+            echo json_encode(['success' => false, 'message' => 'Admin only']);
+            exit;
+        }
+
+        $getDistinct = function($col) use ($pdo) {
+            $stmt = $pdo->prepare("SELECT DISTINCT `$col` FROM resources WHERE `$col` IS NOT NULL AND `$col` != '' AND `$col` != 'Select...' ORDER BY `$col` ASC");
+            $stmt->execute();
+            return $stmt->fetchAll(PDO::FETCH_COLUMN);
+        };
+
+        echo json_encode(['success' => true, 'data' => [
+            'categories' => $getDistinct('category'),
+            'curriculums' => $getDistinct('curriculum'),
+            'school_levels' => $getDistinct('school_level'),
+            'grades' => $getDistinct('grade_level'),
+            'subjects' => $getDistinct('learning_area')
+        ]]);
+        exit;
+    }
     elseif ($action === 'list_feedback') {
         if (!isAdmin()) {
             echo json_encode(['success' => false, 'message' => 'Admin only']);
@@ -124,7 +165,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         $feedbacks = $pdo->query($sql)->fetchAll();
         echo json_encode(['success' => true, 'feedbacks' => $feedbacks]);
     }
-
 }
 elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'comment') {
@@ -184,14 +224,30 @@ elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if (isset($_FILES['file'])) {
             $fileInfo = pathinfo($_FILES['file']['name']);
+            $tempPath = $_FILES['file']['tmp_name'];
+            $fileHash = hash_file('sha256', $tempPath);
+
+            // Duplicate Check
+            $checkStmt = $pdo->prepare("SELECT title FROM resources WHERE file_hash = ? LIMIT 1");
+            $checkStmt->execute([$fileHash]);
+            $existing = $checkStmt->fetch();
+
+            if ($existing) {
+                echo json_encode([
+                    'success' => false, 
+                    'message' => "Duplicate Detected: This exact file has already been uploaded as '" . $existing['title'] . "'."
+                ]);
+                exit;
+            }
+
             $fileName = uniqid() . '.' . $fileInfo['extension'];
             $filePath = $uploadDir . $fileName;
             $dbFilePath = 'uploads/' . $fileName;
 
             move_uploaded_file($_FILES['file']['tmp_name'], $filePath);
 
-            $stmt = $pdo->prepare("INSERT INTO resources (category, title, authors, language, grade_level, quarter, week, content_standards, performance_standards, competencies, description, learning_area, resource_type, year_published, curriculum, school_level, camp_type, material_type, component, module_no, code, file_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-            $stmt->execute([$category, $title, $authors, $language, $grade_level, $quarter, $week, $content_standards, $performance_standards, $competencies, $description, $learning_area, $resource_type, $year_published, $curriculum, $school_level, $camp_type, $material_type, $component, $module_no, $code, $dbFilePath]);
+            $stmt = $pdo->prepare("INSERT INTO resources (category, title, authors, language, grade_level, quarter, week, content_standards, performance_standards, competencies, description, learning_area, resource_type, year_published, curriculum, school_level, camp_type, material_type, component, module_no, code, file_path, file_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt->execute([$category, $title, $authors, $language, $grade_level, $quarter, $week, $content_standards, $performance_standards, $competencies, $description, $learning_area, $resource_type, $year_published, $curriculum, $school_level, $camp_type, $material_type, $component, $module_no, $code, $dbFilePath, $fileHash]);
             echo json_encode(['success' => true, 'message' => 'Upload successful']);
         }
         else {
@@ -390,6 +446,36 @@ elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt = $pdo->prepare("INSERT INTO feedback (user_id, suggestion) VALUES (?, ?)");
         $stmt->execute([$userId, $suggestion]);
         echo json_encode(['success' => true]);
+    }
+    elseif ($action === 'delete_feedback') {
+        if (!isAdmin()) {
+            echo json_encode(['success' => false, 'message' => 'Admin only']);
+            exit;
+        }
+        $data = json_decode(file_get_contents("php://input"), true);
+        $id = $data['id'] ?? 0;
+        $stmt = $pdo->prepare("DELETE FROM feedback WHERE id = ?");
+        if ($stmt->execute([$id])) {
+            echo json_encode(['success' => true]);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Failed to delete']);
+        }
+        exit;
+    }
+    elseif ($action === 'delete_comment') {
+        if (!isAdmin()) {
+            echo json_encode(['success' => false, 'message' => 'Admin only']);
+            exit;
+        }
+        $data = json_decode(file_get_contents("php://input"), true);
+        $id = $data['id'] ?? 0;
+        $stmt = $pdo->prepare("DELETE FROM lr_comments WHERE id = ?");
+        if ($stmt->execute([$id])) {
+            echo json_encode(['success' => true]);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Failed to delete comment']);
+        }
+        exit;
     }
     elseif ($action === 'download') {
 

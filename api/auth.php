@@ -104,6 +104,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         }
 
+        // Check for duplicate username
+        $checkStmt = $pdo->prepare("SELECT id FROM users WHERE username = ?");
+        $checkStmt->execute([$username]);
+        if ($checkStmt->fetch()) {
+            echo json_encode(['success' => false, 'message' => 'Username already exists. Please choose another one.']);
+            exit;
+        }
+
         $hash = password_hash($password, PASSWORD_BCRYPT);
         try {
             // First check if columns exist in runtime (graceful migration)

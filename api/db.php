@@ -11,10 +11,13 @@ $db_user = 'bffvvmvztl_waldz'; // Updated user
 $db_pass = '@Lgorithm23';   // Updated password
 $db_name = 'bffvvmvztl_lrflixdb';
 
+date_default_timezone_set('Asia/Manila');
+
 try {
     $pdo = new PDO("mysql:host=$host;dbname=$db_name;charset=utf8", $db_user, $db_pass);
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
+    $pdo->exec("SET time_zone = '+08:00'");
 }
 catch (PDOException $e) {
     die(json_encode(['success' => false, 'message' => 'Database connection failed: ' . $e->getMessage()]));
@@ -86,6 +89,15 @@ try {
     foreach ($res_cols as $col => $type) {
         $pdo->exec("ALTER TABLE resources ADD COLUMN IF NOT EXISTS $col $type");
     }
+
+    // New: Views tracking
+    $pdo->exec("CREATE TABLE IF NOT EXISTS views (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT,
+        resource_id INT,
+        viewed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )");
+    $pdo->exec("ALTER TABLE resources ADD COLUMN IF NOT EXISTS views_count INT DEFAULT 0");
 
 
 }

@@ -32,11 +32,64 @@ if (!isAdmin()) {
         .ts-dropdown { background: #333 !important; color: white !important; border: 1px solid #444 !important; margin-top: 4px; border-radius: 4px; }
         .ts-dropdown .option:hover, .ts-dropdown .active { background: #e50914 !important; color: white !important; }
         .ts-wrapper.single .ts-control::after { border-color: #aaa transparent transparent transparent !important; }
+
+        /* Unified Modal Styles */
+        .unified-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(10px);
+            display: none; 
+            justify-content: center;
+            align-items: center;
+            z-index: 10001;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        .unified-modal.active { display: flex; opacity: 1; }
+        .unified-modal-content {
+            background: rgba(26, 26, 26, 0.95);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 2.5rem 2rem;
+            max-width: 420px;
+            width: 90%;
+            box-shadow: 0 25px 50px rgba(0,0,0,0.5);
+            text-align: center;
+            transform: translateY(20px);
+            transition: 0.4s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+        }
+        .unified-modal.active .unified-modal-content { transform: translateY(0); }
+        .unified-modal-icon { font-size: 4rem; margin-bottom: 1.5rem; display: block; }
+        
+        .unified-modal.danger .unified-modal-icon { color: #e50914; text-shadow: 0 0 20px rgba(229, 9, 20, 0.4); }
+        .unified-modal.warning .unified-modal-icon { color: #f1c40f; text-shadow: 0 0 20px rgba(241, 196, 15, 0.4); }
+        .unified-modal.success .unified-modal-icon { color: #2ecc71; text-shadow: 0 0 20px rgba(46, 204, 113, 0.4); }
+        
+        .unified-modal-title { font-size: 1.5rem; font-weight: 800; margin-bottom: 0.8rem; color: white; }
+        .unified-modal-text { font-size: 1.05rem; color: #bbb; margin-bottom: 2rem; line-height: 1.6; }
+        .unified-modal-buttons { display: flex; gap: 12px; justify-content: center; }
+        .unified-modal-buttons .btn { flex: 1; height: 48px; border-radius: 10px; font-weight: 600; font-size: 1rem; }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
 </head>
 <body>
+    <!-- Unified Alert/Confirm Modal -->
+    <div id="unified-modal" class="unified-modal">
+        <div class="unified-modal-content">
+            <i class="unified-modal-icon fas fa-exclamation-circle"></i>
+            <div class="unified-modal-title" id="unified-modal-title">Confirm Action</div>
+            <div class="unified-modal-text" id="unified-modal-text">Are you sure you want to proceed?</div>
+            <div class="unified-modal-buttons">
+                <button type="button" class="btn btn-secondary" id="unified-modal-cancel">Cancel</button>
+                <button type="button" class="btn btn-primary" id="unified-modal-confirm">Confirm</button>
+            </div>
+        </div>
+    </div>
     <!-- Upload/Edit Action Modal -->
     <div id="action-modal" class="modal-overlay hidden" style="z-index: 9999; display: flex; align-items:center; justify-content:center;">
         <div class="modal-content" style="max-width: 300px; padding: 2rem; transform: none; text-align: center; background:#181818;">
@@ -126,13 +179,21 @@ if (!isAdmin()) {
                     </select>
                 </div>
 
+                <div class="input-group dynamic-field-group" id="group-grade" style="padding: 0 10px !important; display:none;">
+                    <label>Grade Level <i class="fas fa-spinner fa-spin hidden" id="spin-res-grade"></i></label>
+                    <select id="res-grade" style="width: 100%; padding: 0.9rem; border-radius: 4px; background: #333; color: white;">
+                        <option value="">Select Grade...</option>
+                    </select>
+                    <input type="text" id="res-grade-custom" style="padding:12px 15px; margin-top:5px; display:none;" placeholder="Enter custom grade level">
+                </div>
+
                 <div class="input-group dynamic-field-group" id="group-learning-area" style="padding: 0 10px !important; display:none;">
                     <label id="label-learning-area">Learning Area (Subject) <i class="fas fa-spinner fa-spin hidden" id="spin-res-learning-area"></i></label>
                     <select id="res-learning-area" style="width: 100%; padding: 0.9rem; border-radius: 4px; background: #333; color: white;">
                         <option value="">Select Area...</option>
                     </select>
                 </div>
-                
+
                 <div class="input-group dynamic-field-group" id="group-component" style="padding: 0 10px !important; display:none;">
                     <label>Component</label>
                     <input type="text" id="res-component" style="padding:12px 15px;" placeholder="For TechPro, TLE, EPP">
@@ -140,15 +201,7 @@ if (!isAdmin()) {
 
                 <div class="input-group dynamic-field-group" id="group-title" style="padding: 0 10px !important; display:none;">
                     <label>Title</label>
-                    <input type="text" id="res-title" style="padding:12px 15px;">
-                </div>
-
-                <div class="input-group dynamic-field-group" id="group-grade" style="padding: 0 10px !important; display:none;">
-                    <label>Grade Level <i class="fas fa-spinner fa-spin hidden" id="spin-res-grade"></i></label>
-                    <select id="res-grade" style="width: 100%; padding: 0.9rem; border-radius: 4px; background: #333; color: white;">
-                        <option value="">Select Grade...</option>
-                    </select>
-                    <input type="text" id="res-grade-custom" style="padding:12px 15px; margin-top:5px; display:none;" placeholder="Enter custom grade level">
+                    <input type="text" id="res-title" required style="padding:12px 15px;">
                 </div>
                 
                 <div class="input-group dynamic-field-group" id="group-module-no" style="padding: 0 10px !important; display:none;">
@@ -175,9 +228,9 @@ if (!isAdmin()) {
                 
                 <div style="display:none; gap:10px; padding: 0 10px !important;grid-column: span 1;" class="dynamic-field-group" id="group-quarter-week">
                     <div class="input-group" style="flex:1; display:none;" id="group-quarter">
-                        <label>Quarter <i class="fas fa-spinner fa-spin hidden" id="spin-res-quarter"></i></label>
+                        <label>Quarter/Term <i class="fas fa-spinner fa-spin hidden" id="spin-res-quarter"></i></label>
                         <select id="res-quarter" style="width: 100%; padding: 0.9rem; border-radius: 4px; background: #333; color: white;">
-                            <option value="">Select Quarter...</option>
+                            <option value="">Select Quarter/Term...</option>
                         </select>
                     </div>
                     <div class="input-group" style="flex:1; display:none;" id="group-week">
@@ -185,6 +238,7 @@ if (!isAdmin()) {
                         <select id="res-week" style="width: 100%; padding: 0.9rem; border-radius: 4px; background: #333; color: white;">
                             <option value="">Select Week...</option>
                         </select>
+                        <input type="text" id="res-week-manual" placeholder="Type Week No." style="width: 100%; padding: 12px 15px; border-radius: 4px; background: #333; color: white; display:none;">
                     </div>
                 </div>
 
@@ -198,7 +252,7 @@ if (!isAdmin()) {
                 
                 <div class="input-group dynamic-field-group" id="group-code" style="padding: 0 10px !important; display:none;">
                     <label>Code</label>
-                    <input type="text" id="res-code" style="padding:12px 15px;" readonly>
+                    <input type="text" id="res-code" style="padding:12px 15px;" placeholder="Paste code here to auto-fill">
                 </div>
                 
                 <div class="input-group dynamic-field-group" id="group-content-std" style="grid-column: 1 / -1; padding: 0 10px !important; display:none;">
@@ -233,7 +287,8 @@ if (!isAdmin()) {
                     </div>
                     
                     <div style="display:flex; flex-direction:row; gap:15px; margin-top:15px; align-items:center;">
-                        <button type="button" id="cancel-edit-btn" class="btn btn-secondary hidden" onclick="cancelEdit()" style="flex:1; height:40px; font-size:0.9rem; margin:0;"><i class="fas fa-times"></i> Cancel Edit</button>
+                        <button type="button" id="cancel-edit-btn" class="btn btn-secondary hidden" onclick="cancelResourceEdit()" style="flex:1; height:40px; font-size:0.9rem; margin:0;"><i class="fas fa-times"></i> Cancel Edit</button>
+                        <button type="button" id="delete-res-btn" class="btn btn-danger hidden" onclick="confirmDeleteResource()" style="flex:1; height:40px; font-size:0.9rem; margin:0;"><i class="fas fa-trash-alt"></i> Delete</button>
                         <button type="button" id="clear-form-btn" class="btn btn-secondary" onclick="confirmClearForm()" style="flex:1; height:40px; font-size:0.9rem; margin:0;"><i class="fas fa-eraser"></i> Clear</button>
                         <button type="submit" class="btn btn-primary" id="upload-submit-btn" style="flex:1; height:40px; font-size:0.9rem; margin:0;"><i class="fas fa-plus"></i> Submit Resource</button>
                     </div>
@@ -248,18 +303,37 @@ if (!isAdmin()) {
             <h2>Manage Resources</h2>
             <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin-bottom:1rem;">
                 <input type="text" id="resources-search" placeholder="Search by title..."
-                    style="flex:1; min-width:260px; padding:0.8rem 0.9rem; border-radius:6px; border:1px solid #333; background:#222; color:white;">
+                    style="flex:1; min-width:200px; padding:0.8rem 0.9rem; border-radius:6px; border:1px solid #333; background:#222; color:white;">
+                
+                <select id="res-filter-category" style="padding:0.8rem 0.9rem; border-radius:6px; background:#222; border:1px solid #333; color:white;">
+                    <option value="">All Categories</option>
+                </select>
+                <select id="res-filter-curriculum" style="padding:0.8rem 0.9rem; border-radius:6px; background:#222; border:1px solid #333; color:white;">
+                    <option value="">All Curriculum</option>
+                </select>
+                <select id="res-filter-level" style="padding:0.8rem 0.9rem; border-radius:6px; background:#222; border:1px solid #333; color:white;">
+                    <option value="">All Levels</option>
+                </select>
+                <select id="res-filter-grade" style="padding:0.8rem 0.9rem; border-radius:6px; background:#222; border:1px solid #333; color:white;">
+                    <option value="">All Grades</option>
+                </select>
+                <select id="res-filter-subject" style="padding:0.8rem 0.9rem; border-radius:6px; background:#222; border:1px solid #333; color:white;">
+                    <option value="">All Subjects</option>
+                </select>
+
                 <button class="btn btn-secondary" id="resources-sort-downloads" type="button">Sort Downloads: High to Low</button>
             </div>
             <div style="overflow-x:auto;">
                 <table class="data-table" id="resources-table">
                     <thead>
                         <tr>
+                            <th>Category</th>
+                            <th>LR Type</th>
                             <th>Title</th>
-                            <th>Competencies</th>
-                            <th>Downloads</th>
-                            <th>Likes</th>
-                            <th>Actions</th>
+                            <th>Curriculum</th>
+                            <th>Level</th>
+                            <th>Grade & Subject</th>
+                            <th>Stats (D/L/V)</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -272,10 +346,30 @@ if (!isAdmin()) {
 
         <!-- Manage Competencies Tab -->
         <div id="comp-section" class="admin-card fade-in tab-content" style="display:none;">
-            <h2>Manage Competencies</h2>
             <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; margin-bottom:1rem; gap:12px;">
+                <h2 style="margin:0;">Manage Competencies <button class="btn btn-secondary" style="padding:4px 8px; font-size:0.9rem; margin-left:10px; border-radius:50%;" onclick="toggleCompDrawer()" title="Settings"><i class="fas fa-cog"></i></button></h2>
+                
+                <!-- Sliding Drawer for Critical Actions -->
+                <div id="comp-drawer" style="display:flex; gap:10px; overflow:hidden; width:0; transition: width 0.3s ease-in-out; align-items:center; background: rgba(255,255,255,0.05); padding: 0; border-radius: 6px;">
+                    <button class="btn btn-danger" onclick="confirmClearAllCompetencies()" style="white-space:nowrap;"><i class="fas fa-trash-alt"></i> Clear Data</button>
+                    <button class="btn btn-secondary" onclick="confirmImportCSV()" style="white-space:nowrap;"><i class="fas fa-file-csv"></i> Import CSV</button>
+                </div>
+
+                <div style="display:flex; gap:10px; align-items:center;">
+                    <input type="file" id="comp-csv-upload" accept=".csv" style="display:none;" onchange="importCompCSV(this)">
+                    <button class="btn btn-primary" onclick="openCompModal();"><i class="fas fa-plus"></i> Add</button>
+                </div>
+            </div>
+
+            <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin-bottom:1rem;">
                 <input type="text" id="comp-search" placeholder="Search by MELC, Code, Subject..."
                     style="flex:1; min-width:200px; padding:0.8rem 0.9rem; border-radius:6px; border:1px solid #333; background:#222; color:white;">
+                <select id="comp-filter-curriculum" style="padding:0.8rem 0.9rem; border-radius:6px; background:#222; border:1px solid #333; color:white;">
+                    <option value="">All Curriculum</option>
+                </select>
+                <select id="comp-filter-school-level" style="padding:0.8rem 0.9rem; border-radius:6px; background:#222; border:1px solid #333; color:white;">
+                    <option value="">All Levels</option>
+                </select>
                 <select id="comp-filter-grade" style="padding:0.8rem 0.9rem; border-radius:6px; background:#222; border:1px solid #333; color:white;">
                     <option value="">All Grades</option>
                 </select>
@@ -283,28 +377,24 @@ if (!isAdmin()) {
                     <option value="">All Subjects</option>
                 </select>
                 <select id="comp-filter-quarter" style="padding:0.8rem 0.9rem; border-radius:6px; background:#222; border:1px solid #333; color:white;">
-                    <option value="">All Quarters</option>
+                    <option value="">All Quarter/Terms</option>
                 </select>
                 <select id="comp-filter-week" style="padding:0.8rem 0.9rem; border-radius:6px; background:#222; border:1px solid #333; color:white;">
                     <option value="">All Weeks</option>
                 </select>
                 <button class="btn btn-secondary" onclick="clearCompFilters()"><i class="fas fa-eraser"></i> Clear Filters</button>
-                <button class="btn btn-danger" onclick="clearAllCompetencies()"><i class="fas fa-trash-alt"></i> Clear All Data</button>
-                <button class="btn btn-secondary" onclick="document.getElementById('comp-csv-upload').click();"><i class="fas fa-file-csv"></i> Import CSV</button>
-                <input type="file" id="comp-csv-upload" accept=".csv" style="display:none;" onchange="importCompCSV(this)">
-                <button class="btn btn-primary" onclick="openCompModal();"><i class="fas fa-plus"></i> Add</button>
             </div>
             <div style="overflow-x:auto;">
                 <table class="data-table" id="comp-table">
                     <thead>
                         <tr>
+                            <th>Curriculum</th>
                             <th>Code</th>
                             <th>Subject</th>
                             <th>School Level</th>
                             <th>Grade Level</th>
-                            <th>Quarter</th>
+                            <th>Quarter/Term</th>
                             <th>MELC</th>
-                            <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -339,9 +429,8 @@ if (!isAdmin()) {
                             <th>School/Office</th>
                             <th>Position</th>
                             <th>Visits</th>
-                            <th>Downloads</th>
+                            <th>Activity (D/V)</th>
                             <th>Last Login</th>
-                            <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -357,14 +446,14 @@ if (!isAdmin()) {
             <h2 style="margin-bottom: 1.5rem;"><i class="fas fa-chart-line"></i> Analytics Dashboard</h2>
 
             <!-- Summary Cards -->
-            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+            <div style="display:grid; grid-template-columns: 1.2fr 1fr 1fr 1fr 1fr 1fr; gap: 1rem; margin-bottom: 2rem;">
+                <div style="background:#1a2e1a; border-radius:8px; padding:1.2rem; text-align:center; border:2px solid #2ecc71; box-shadow: 0 0 15px rgba(46, 204, 113, 0.2);">
+                    <div style="font-size:2.5rem; font-weight:900; color:#2ecc71;" id="stat-resources">–</div>
+                    <div style="color:#eee; font-size:1rem; font-weight:600;">Total Resources</div>
+                </div>
                 <div style="background:#1a1a2e; border-radius:8px; padding:1.2rem; text-align:center; border:1px solid #333;">
                     <div style="font-size:2rem; font-weight:800; color:#e50914;" id="stat-users">–</div>
                     <div style="color:#aaa; font-size:0.9rem;">Registered Users</div>
-                </div>
-                <div style="background:#1a1a2e; border-radius:8px; padding:1.2rem; text-align:center; border:1px solid #333;">
-                    <div style="font-size:2rem; font-weight:800; color:#3498db;" id="stat-resources">–</div>
-                    <div style="color:#aaa; font-size:0.9rem;">Total Resources</div>
                 </div>
                 <div style="background:#1a1a2e; border-radius:8px; padding:1.2rem; text-align:center; border:1px solid #333;">
                     <div style="font-size:2rem; font-weight:800; color:#2ecc71;" id="stat-downloads">–</div>
@@ -374,11 +463,12 @@ if (!isAdmin()) {
                     <div style="font-size:2rem; font-weight:800; color:#f39c12;" id="stat-likes">–</div>
                     <div style="color:#aaa; font-size:0.9rem;">Total Likes</div>
                 </div>
-            </div>
-
-            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1rem; margin-top:-1rem; margin-bottom: 2rem;">
                 <div style="background:#1a1a2e; border-radius:8px; padding:1.2rem; text-align:center; border:1px solid #333;">
-                    <div style="font-size:2rem; font-weight:800; color:#9b59b6;" id="stat-visits">â€“</div>
+                    <div style="font-size:2rem; font-weight:800; color:#3498db;" id="stat-views">–</div>
+                    <div style="color:#aaa; font-size:0.9rem;">Total Views</div>
+                </div>
+                <div style="background:#1a1a2e; border-radius:8px; padding:1.2rem; text-align:center; border:1px solid #333;">
+                    <div style="font-size:2rem; font-weight:800; color:#9b59b6;" id="stat-visits">–</div>
                     <div style="color:#aaa; font-size:0.9rem;">Total Site Visits</div>
                 </div>
             </div>
@@ -463,6 +553,7 @@ if (!isAdmin()) {
                                 <th>School/Office</th>
                                 <th>Date Submitted</th>
                                 <th>Suggestion</th>
+                                <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -484,6 +575,7 @@ if (!isAdmin()) {
                                 <th>Resource Title</th>
                                 <th>Date Submitted</th>
                                 <th>Comment / Error</th>
+                                <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -575,34 +667,53 @@ if (!isAdmin()) {
                 <div style="display:flex; gap:15px;">
                     <div class="input-group" style="flex:1;">
                         <label>Curriculum</label>
-                        <input type="text" id="comp-curriculum" style="width:100%; padding:0.8rem; border-radius:6px; background:#333; color:white; border:1px solid #444;">
+                        <select id="comp-curriculum" style="width:100%; padding:0.8rem; border-radius:6px; background:#333; color:white; border:1px solid #444;">
+                            <option value="">Select...</option>
+                            <option value="MATATAG">MATATAG</option>
+                            <option value="K to 12">K to 12</option>
+                        </select>
                     </div>
+                    <div class="input-group" style="flex:1;">
+                        <label>School Level</label>
+                        <select id="comp-school-level" style="width:100%; padding:0.8rem; border-radius:6px; background:#333; color:white; border:1px solid #444;">
+                            <option value="">Select...</option>
+                            <option value="Elementary">Elementary</option>
+                            <option value="Secondary">Secondary</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div style="display:flex; gap:15px;">
                     <div class="input-group" style="flex:1;">
                         <label>Grade Level</label>
                         <input type="text" id="comp-grade" style="width:100%; padding:0.8rem; border-radius:6px; background:#333; color:white; border:1px solid #444;">
                     </div>
-                </div>
-
-                <div style="display:flex; gap:15px;">
                     <div class="input-group" style="flex:1;">
                         <label>Subject</label>
                         <input type="text" id="comp-subject" style="width:100%; padding:0.8rem; border-radius:6px; background:#333; color:white; border:1px solid #444;">
                     </div>
-                    <div class="input-group" style="flex:1;">
-                        <label>Quarter/Term</label>
-                        <input type="text" id="comp-quarter" style="width:100%; padding:0.8rem; border-radius:6px; background:#333; color:white; border:1px solid #444;">
-                    </div>
                 </div>
 
                 <div style="display:flex; gap:15px;">
                     <div class="input-group" style="flex:1;">
+                        <label>Quarter/Term</label>
+                        <select id="comp-quarter" style="width:100%; padding:0.8rem; border-radius:6px; background:#333; color:white; border:1px solid #444;">
+                            <option value="">Select...</option>
+                            <option value="1">1</option>
+                            <option value="2">2</option>
+                            <option value="3">3</option>
+                            <option value="4">4</option>
+                        </select>
+                    </div>
+                    <div class="input-group" style="flex:1;">
                         <label>Week</label>
                         <input type="text" id="comp-week" style="width:100%; padding:0.8rem; border-radius:6px; background:#333; color:white; border:1px solid #444;">
                     </div>
-                    <div class="input-group" style="flex:1;">
-                        <label>Code</label>
-                        <input type="text" id="comp-code" style="width:100%; padding:0.8rem; border-radius:6px; background:#333; color:white; border:1px solid #444;">
-                    </div>
+                </div>
+
+                <div class="input-group">
+                    <label>Code</label>
+                    <input type="text" id="comp-code" style="width:100%; padding:0.8rem; border-radius:6px; background:#333; color:white; border:1px solid #444;">
                 </div>
 
                 <div class="input-group">
@@ -622,6 +733,7 @@ if (!isAdmin()) {
 
                 <div style="margin-top:1rem; display:flex; gap:15px;">
                     <button type="button" class="btn btn-secondary" onclick="closeCompModal()" style="flex:1;">Cancel</button>
+                    <button type="button" id="comp-delete-btn" class="btn btn-secondary hidden" style="flex:1; border:1px solid var(--accent-color); color:var(--accent-color);" onclick="confirmDeleteCompetency()"><i class="fas fa-trash"></i> Delete</button>
                     <button type="submit" class="btn btn-primary" style="flex:1;"><i class="fas fa-save"></i> Save Competency</button>
                 </div>
             </form>
@@ -637,6 +749,18 @@ if (!isAdmin()) {
                 <!-- Populated dynamically -->
             </div>
             <button class="btn btn-primary" style="margin-top:20px; width:100%;" onclick="document.getElementById('user-info-modal').classList.add('hidden'); document.getElementById('user-info-modal').classList.remove('active');">Close</button>
+        </div>
+    </div>
+
+    <!-- Feedback Modal -->
+    <div id="feedback-modal" class="modal hidden" style="display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,0.8); backdrop-filter:blur(8px);">
+        <div class="modal-content admin-card fade-in" style="max-width:600px; width:90%; position:relative; margin:0;">
+            <h3>Feedback Details</h3>
+            <div id="feedback-info" style="margin: 1.5rem 0; line-height:1.6;"></div>
+            <div style="display:flex; gap:10px; justify-content:flex-end;">
+                <button type="button" class="btn btn-secondary" onclick="closeFeedbackModal()">Close</button>
+                <button type="button" class="btn btn-danger" id="delete-feedback-btn">Delete Feedback</button>
+            </div>
         </div>
     </div>
 

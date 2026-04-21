@@ -755,8 +755,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     if (globalResources.length > 0) {
                         const latest = globalResources[0];
-                        document.getElementById('hero-title').innerText = latest.title;
-                        document.getElementById('hero-desc').innerText = latest.description || 'No description provided.';
+                        document.getElementById('hero-title').innerText = latest.title || 'Untitled';
+                        
+                        let displayDesc = latest.description || 'No description provided.';
+                        const meta = [];
+                        if(latest.category) meta.push(latest.category);
+                        if(latest.resource_type) meta.push(latest.resource_type);
+                        if(latest.grade_level) meta.push(`Grade: ${latest.grade_level}`);
+                        if(latest.learning_area) meta.push(latest.learning_area);
+                        
+                        const metaText = meta.length > 0 ? meta.join(' • ') + "\n" : "";
+                        document.getElementById('hero-desc').innerText = metaText + displayDesc;
+                        
                         const heroViewBtn = document.getElementById('hero-view-btn');
                         const newHeroBtn = heroViewBtn.cloneNode(true);
                         heroViewBtn.parentNode.replaceChild(newHeroBtn, heroViewBtn);
@@ -770,27 +780,106 @@ document.addEventListener('DOMContentLoaded', () => {
             });
     }
 
+    window.closeCategoryView = () => {
+        document.getElementById('category-full-view').classList.add('hidden');
+        document.getElementById('hero-section').style.display = 'block';
+        document.getElementById('dynamic-categories-container').style.display = 'block';
+        document.getElementById('category-search').value = '';
+        
+        // Restore top search
+        const searchBox = document.querySelector('.search-container');
+        if (searchBox) searchBox.style.setProperty('display', 'block', 'important');
+        
+        resetCategoryFilters();
+    };
+
+    window.resetCategoryFilters = () => {
+        ['filter-lr-type', 'filter-school-level', 'filter-grade-level', 'filter-quarter', 'filter-learning-area'].forEach(id => {
+            const el = document.getElementById(id);
+            if(el) el.value = '';
+        });
+        document.getElementById('category-search').value = '';
+        if(window.currentCategoryItems) renderCategoryGrid(window.currentCategoryItems);
+    };
+
+    function populateCategoryFilters(items) {
+        const getUnique = (prop) => [...new Set(items.map(r => r[prop]).filter(Boolean))].sort();
+        
+        const fill = (id, values, defaultLabel) => {
+            const select = document.getElementById(id);
+            if(!select) return;
+            let html = `<option value="">${defaultLabel}</option>`;
+            values.forEach(v => html += `<option value="${v}">${v}</option>`);
+            select.innerHTML = html;
+        };
+
+        fill('filter-lr-type', getUnique('resource_type'), 'All LR Types');
+        fill('filter-school-level', getUnique('school_level'), 'All Levels');
+        fill('filter-grade-level', getUnique('grade_level'), 'All Grades');
+        fill('filter-quarter', getUnique('quarter'), 'All Quarters');
+        fill('filter-learning-area', getUnique('learning_area'), 'All Subject Areas');
+    }
+
+    function applyCategoryFilters() {
+        if(!window.currentCategoryItems) return;
+        
+        const term = document.getElementById('category-search').value.toLowerCase().trim();
+        const lrType = document.getElementById('filter-lr-type').value;
+        const schoolLevel = document.getElementById('filter-school-level').value;
+        const gradeLevel = document.getElementById('filter-grade-level').value;
+        const quarter = document.getElementById('filter-quarter').value;
+        const learningArea = document.getElementById('filter-learning-area').value;
+
+        const filtered = window.currentCategoryItems.filter(r => {
+            const matchSearch = !term || 
+                (r.title || '').toLowerCase().includes(term) || 
+                (r.description || '').toLowerCase().includes(term) ||
+                (r.authors || '').toLowerCase().includes(term) ||
+                (r.resource_type || '').toLowerCase().includes(term);
+            const matchType = !lrType || r.resource_type === lrType;
+            const matchSchool = !schoolLevel || r.school_level === schoolLevel;
+            const matchGrade = !gradeLevel || r.grade_level === gradeLevel;
+            const matchQuarter = !quarter || String(r.quarter) === quarter;
+            const matchArea = !learningArea || r.learning_area === learningArea;
+            
+            return matchSearch && matchType && matchSchool && matchGrade && matchQuarter && matchArea;
+        });
+        
+        renderCategoryGrid(filtered);
+    }
+
+    // Attach listeners
+    ['category-search', 'filter-lr-type', 'filter-school-level', 'filter-grade-level', 'filter-quarter', 'filter-learning-area'].forEach(id => {
+        document.getElementById(id)?.addEventListener('input', applyCategoryFilters);
+    });
+
     window.filterCategory = function (cat) {
         document.getElementById('hero-section').style.display = 'none';
         document.getElementById('dynamic-categories-container').style.display = 'none';
 
+        // Hide top search while in category
+        const searchBox = document.querySelector('.search-container');
+        if (searchBox) searchBox.style.setProperty('display', 'none', 'important');
+
         const fullView = document.getElementById('category-full-view');
         fullView.classList.remove('hidden');
-        // Push content below the fixed navbar (~80px tall)
         fullView.style.paddingTop = '100px';
         document.getElementById('category-full-title').innerText = cat;
+        
+        window.currentCategoryItems = globalResources.filter(r => r.category === cat);
+        populateCategoryFilters(window.currentCategoryItems);
+        renderCategoryGrid(window.currentCategoryItems);
+    };
 
+    function renderCategoryGrid(items) {
         const grid = document.getElementById('category-full-grid');
         grid.innerHTML = '';
 
-        const items = globalResources.filter(r => r.category === cat);
-
         if (items.length === 0) {
-            grid.innerHTML = '<p style="color:#aaa; padding: 20px;">No resources found in this category yet.</p>';
+            grid.innerHTML = '<p style="color:#aaa; padding: 20px 4%;">No resources found in this category yet.</p>';
             return;
         }
 
-        // Group by sub-categories (resource_type)
         const subGrouped = {};
         items.forEach(r => {
             const sub = r.resource_type || 'Uncategorized';
@@ -801,7 +890,10 @@ document.addEventListener('DOMContentLoaded', () => {
         for (const [subCat, subItems] of Object.entries(subGrouped)) {
             renderHorizontalRow(grid, subCat, subItems);
         }
-    };
+    }
+
+    // (Removed old category-search listener as it's now handled by applyCategoryFilters via input event array)
+
 
     async function renderPdfThumbnail(url, canvas) {
         try {
@@ -852,18 +944,34 @@ document.addEventListener('DOMContentLoaded', () => {
         const rowDiv = document.createElement('div');
         rowDiv.className = 'row';
         rowDiv.id = `row-${title.replace(/[^a-zA-Z0-9]/g, '-')}`;
+        rowDiv.style.cssText = 'width: 100%; margin-bottom: 2.5rem; display: block;';
+        
         rowDiv.innerHTML = `
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 1rem;">
-                <h2>${isSuggested ? '<i class="fas fa-magic" style="color:var(--accent-color); margin-right:8px;"></i>' : ''}${title}</h2>
-                ${seeAllAction ? `<button class="btn btn-secondary" style="padding: 5px 10px; font-size: 0.8rem;" onclick="${seeAllAction}">See All</button>` : ''}
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 0.8rem; padding: 0 4%;">
+                <h2 style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin:0; flex-shrink: 1;">
+                    ${isSuggested ? '<i class="fas fa-magic" style="color:var(--accent-color); margin-right:8px;"></i>' : ''}${title}
+                </h2>
+                ${seeAllAction ? `<button class="btn btn-secondary" style="padding: 5px 10px; font-size: 0.8rem; flex-shrink:0;" onclick="${seeAllAction}">See All</button>` : ''}
             </div>
-            <div style="position:relative; display:flex; align-items:center;">
-                <button class="scroll-left" style="position:absolute; left:0; z-index:10; background:rgba(0,0,0,0.5); border:none; color:white; font-size:2rem; cursor:pointer; height:100%;"><i class="fas fa-chevron-left"></i></button>
-                <div class="row-posters" style="display:flex; overflow-x:hidden; scroll-behavior:smooth; width:100%;"></div>
-                <button class="scroll-right" style="position:absolute; right:0; z-index:10; background:rgba(0,0,0,0.5); border:none; color:white; font-size:2rem; cursor:pointer; height:100%;"><i class="fas fa-chevron-right"></i></button>
+            <div style="position:relative; display:flex; align-items:center; width:100%;">
+                <button class="scroll-left" style="position:absolute; left:0; z-index:20; background:linear-gradient(to right, rgba(0,0,0,0.8), transparent); border:none; color:white; font-size:2rem; cursor:pointer; height:100%; width:4%; display:flex; align-items:center; justify-content:center; transition:0.3s; opacity:0; outline:none;"><i class="fas fa-chevron-left"></i></button>
+                <div class="row-posters" style="display:flex; overflow-x:hidden; scroll-behavior:smooth; width:100%; padding: 0 4%; gap: 12px;"></div>
+                <button class="scroll-right" style="position:absolute; right:0; z-index:20; background:linear-gradient(to left, rgba(0,0,0,0.8), transparent); border:none; color:white; font-size:2rem; cursor:pointer; height:100%; width:4%; display:flex; align-items:center; justify-content:center; transition:0.3s; opacity:1; outline:none;"><i class="fas fa-chevron-right"></i></button>
             </div>
         `;
         container.appendChild(rowDiv);
+        
+        const scrollBtnL = rowDiv.querySelector('.scroll-left');
+        const scrollBtnR = rowDiv.querySelector('.scroll-right');
+        
+        rowDiv.querySelector('div[style*="position:relative"]').addEventListener('mouseenter', () => {
+            scrollBtnL.style.opacity = '1';
+            scrollBtnR.style.opacity = '1';
+        });
+        rowDiv.querySelector('div[style*="position:relative"]').addEventListener('mouseleave', () => {
+             scrollBtnL.style.opacity = '0';
+             scrollBtnR.style.opacity = '1'; // keep right arrow visible or semi-transparent
+        });
 
         const postersDiv = rowDiv.querySelector('.row-posters');
         items.forEach(res => {
@@ -922,14 +1030,57 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             document.getElementById('modal-title').innerText = res.title || 'Untitled';
-            document.getElementById('modal-description').innerText = res.description || 'No description provided.';
+            
+            const descEl = document.getElementById('modal-description');
+            if(res.description) {
+                descEl.innerText = res.description;
+                descEl.previousElementSibling.style.display = 'block'; // Show "DESCRIPTION" header
+                descEl.style.display = 'block';
+            } else {
+                descEl.style.display = 'none';
+                descEl.previousElementSibling.style.display = 'none';
+            }
+
             document.getElementById('modal-likes').innerText = res.likes_count || '0';
             document.getElementById('modal-downloads').innerText = res.downloads_count || '0';
-            document.getElementById('modal-competencies').innerText = res.competencies || 'General competencies apply.';
-            document.getElementById('modal-authors').innerText = res.authors ? `By: ${res.authors}` : 'Author: Unknown';
+            
+            const compEl = document.getElementById('modal-competencies');
+            if(res.competencies) {
+                compEl.innerText = res.competencies;
+                compEl.previousElementSibling.style.display = 'block';
+                compEl.style.display = 'block';
+            } else {
+                compEl.style.display = 'none';
+                compEl.previousElementSibling.style.display = 'none';
+            }
+
+            document.getElementById('modal-authors').innerText = res.authors ? `Author: ${res.authors}` : 'Author: Unknown';
 
             document.getElementById('modal-grade').innerText = res.grade_level || 'General';
             document.getElementById('modal-subject').innerText = res.learning_area || (res.category || 'General');
+
+            // Inject Dynamic Meta
+            const dynamicMetaContainer = document.getElementById('modal-dynamic-meta');
+            dynamicMetaContainer.innerHTML = '';
+            
+            const addMeta = (label, val) => {
+                if(!val || val === 'N/A') return;
+                const div = document.createElement('div');
+                div.innerHTML = `<h3 style="margin-bottom:4px; color:#e50914; font-size:0.75rem; text-transform:uppercase; letter-spacing:0.1em; font-weight:800;">${label}</h3>
+                                 <p style="color:#eee; font-size:0.95rem;">${val}</p>`;
+                dynamicMetaContainer.appendChild(div);
+            };
+
+            addMeta('Category', res.category);
+            addMeta('Resource Type', res.resource_type);
+            addMeta('Curriculum', res.curriculum);
+            addMeta('School Level', res.school_level);
+            addMeta('Quarter', res.quarter);
+            addMeta('Week', res.week);
+            addMeta('Language', res.language);
+            addMeta('Year Published', res.year_published);
+            addMeta('Module No', res.module_no);
+            addMeta('Component', res.component);
 
             const modalCanvas = document.getElementById('modal-pdf-canvas');
             if (modalCanvas) {
@@ -965,7 +1116,7 @@ document.addEventListener('DOMContentLoaded', () => {
             loadRelated(res.id);
         } catch (err) {
             console.error('Error in openModal:', err);
-            alert('Error showing resource details: ' + err.message);
+            // alert('Error showing resource details: ' + err.message);
         }
     }
 
@@ -1028,6 +1179,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const pdfRenderCanvasRight = document.getElementById('pdf-render-canvas-right');
     const pdfCtxLeft = pdfRenderCanvasLeft ? pdfRenderCanvasLeft.getContext('2d') : null;
     const pdfCtxRight = pdfRenderCanvasRight ? pdfRenderCanvasRight.getContext('2d') : null;
+    let customPdfViewMode = 'double'; // 'single' or 'double'
+
+    document.getElementById('pdf-toggle-view')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        customPdfViewMode = customPdfViewMode === 'double' ? 'single' : 'double';
+        document.getElementById('pdf-view-mode-text').textContent = customPdfViewMode === 'double' ? 'Two Page' : 'One Page';
+        queueRenderPdfPage(customPdfPageNum);
+    });
 
     function updateZoomLabel() {
         const el = document.getElementById('pdf-zoom-level');
@@ -1047,7 +1206,7 @@ document.addEventListener('DOMContentLoaded', () => {
             await leftPage.render({ canvasContext: pdfCtxLeft, viewport: leftViewport }).promise;
 
             const rightPageNumber = num + 1;
-            if (rightPageNumber <= customPdfDoc.numPages) {
+            if (customPdfViewMode === 'double' && rightPageNumber <= customPdfDoc.numPages) {
                 const rightPage = await customPdfDoc.getPage(rightPageNumber);
                 const rightViewport = rightPage.getViewport({ scale: customPdfScale });
                 pdfRenderCanvasRight.height = rightViewport.height;
@@ -1055,9 +1214,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 pdfRenderCanvasRight.style.display = 'block';
                 await rightPage.render({ canvasContext: pdfCtxRight, viewport: rightViewport }).promise;
             } else {
-                pdfCtxRight.clearRect(0, 0, pdfRenderCanvasRight.width, pdfRenderCanvasRight.height);
-                pdfRenderCanvasRight.width = leftViewport.width;
-                pdfRenderCanvasRight.height = leftViewport.height;
+                if(pdfCtxRight) pdfCtxRight.clearRect(0, 0, pdfRenderCanvasRight.width, pdfRenderCanvasRight.height);
                 pdfRenderCanvasRight.style.display = 'none';
             }
         } finally {
@@ -1069,7 +1226,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        const rightPageNumber = Math.min(num + 1, customPdfDoc.numPages);
+        const rightPageNumber = (customPdfViewMode === 'double') ? Math.min(num + 1, customPdfDoc.numPages) : num;
         document.getElementById('pdf-current-page').textContent = num === rightPageNumber ? `${num}` : `${num}-${rightPageNumber}`;
         updateZoomLabel();
     }
@@ -1081,10 +1238,10 @@ document.addEventListener('DOMContentLoaded', () => {
             renderPdfPageAsViewer(num);
         }
     }
+
     // Zoom controls
     const zoomInBtn = document.getElementById('pdf-zoom-in');
     const zoomOutBtn = document.getElementById('pdf-zoom-out');
-    const zoomFitBtn = document.getElementById('pdf-zoom-fit');
 
     if (zoomInBtn) zoomInBtn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -1109,7 +1266,7 @@ document.addEventListener('DOMContentLoaded', () => {
             customPdfDoc.getPage(customPdfPageNum).then(page => {
                 const containerWidth = document.getElementById('pdf-viewer-container').clientWidth - 60;
                 const viewport = page.getViewport({ scale: 1 });
-                customPdfScale = (containerWidth - 20) / (viewport.width * 2);
+                customPdfScale = (containerWidth - 20) / (viewport.width * (customPdfViewMode === 'double' ? 2 : 1));
                 queueRenderPdfPage(customPdfPageNum);
             });
         });
@@ -1128,21 +1285,19 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-
-
-
     document.getElementById('pdf-prev-page').addEventListener('click', (e) => {
         e.stopPropagation();
         if (customPdfPageNum <= 1) return;
-        customPdfPageNum = Math.max(1, customPdfPageNum - 2);
+        customPdfPageNum = Math.max(1, customPdfPageNum - (customPdfViewMode === 'double' ? 2 : 1));
         queueRenderPdfPage(customPdfPageNum);
     });
 
-
     document.getElementById('pdf-next-page').addEventListener('click', (e) => {
         e.stopPropagation();
-        if (!customPdfDoc || customPdfPageNum + 1 >= customPdfDoc.numPages) return;
-        customPdfPageNum += 2;
+        if (!customPdfDoc) return;
+        const step = (customPdfViewMode === 'double' ? 2 : 1);
+        if (customPdfPageNum + (customPdfViewMode === 'double' ? 1 : 0) >= customPdfDoc.numPages) return;
+        customPdfPageNum += step;
         queueRenderPdfPage(customPdfPageNum);
     });
 
@@ -1225,6 +1380,9 @@ document.addEventListener('DOMContentLoaded', () => {
             alert('Error loading PDF: ' + err.message);
             console.error(err);
         });
+
+        // Increment view counter (fire-and-forget)
+        fetch(`api/resources.php?action=view&id=${currentResource.id}`).catch(() => { });
     });
 
 
