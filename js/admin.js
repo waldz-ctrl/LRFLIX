@@ -122,7 +122,9 @@ document.addEventListener('DOMContentLoaded', () => {
     let allResources = [];
 
     // Tab Navigation
-    function switchTab(targetId) {
+    window._uploadSuccess = false;
+
+    window.switchTab = function switchTab(targetId) {
         document.querySelectorAll('.tab-btn').forEach(b => {
             b.classList.remove('btn-primary');
             b.classList.add('btn-secondary');
@@ -141,7 +143,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if(targetId === 'analytics-section') loadAnalytics();
         if(targetId === 'feedbacks-section') loadFeedbacks();
         if(targetId === 'comp-section') loadCompetencies();
-    }
+    };
+    const switchTab = window.switchTab;
 
     document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
@@ -233,7 +236,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     melc: c.melc,
                     content: c.content_std || '',
                     perf: c.performance_std || '',
-                    code: c.code || ''
+                    code: c.code || '',
+                    week: c.week || ''
                 });
             }
         });
@@ -249,18 +253,36 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function updateStandardsFromAll() {
         const selects = Array.from(document.querySelectorAll('.res-comp-select'));
-        const firstSelected = selects.find(s => s.value !== '');
-        
-        if (firstSelected && firstSelected.tomselect) {
-            const val = firstSelected.value;
-            const opt = firstSelected.tomselect.options[val];
-            if (opt) {
-                document.getElementById('res-content-std').value = opt.content || '';
-                document.getElementById('res-perf-std').value = opt.perf || '';
-                document.getElementById('res-code').value = opt.code || '';
-                document.getElementById('res-comp').value = opt.melc || '';
-                return;
+        const selectedOpts = selects
+            .filter(s => s.value !== '' && s.tomselect && s.tomselect.options[s.value])
+            .map(s => s.tomselect.options[s.value]);
+            
+        if (selectedOpts.length > 0) {
+            document.getElementById('res-content-std').value = selectedOpts[0].content || '';
+            document.getElementById('res-perf-std').value = selectedOpts[0].perf || '';
+            
+            const uniqueCodes = [...new Set(selectedOpts.map(opt => opt.code).filter(c => c))];
+            document.getElementById('res-code').value = uniqueCodes.join(', ') || '';
+            
+            const allMelcs = selectedOpts.map(opt => opt.melc).filter(m => m);
+            document.getElementById('res-comp').value = allMelcs.join(' | ') || '';
+
+            // Autofill week if we have a valid week from the competency and no week is currently selected
+            const weekSelect = document.getElementById('res-week');
+            if (weekSelect && weekSelect.tomselect && selectedOpts[0].week) {
+                const targetWeek = selectedOpts[0].week.toString();
+                const currentWeek = weekSelect.tomselect.getValue();
+                if (!currentWeek || currentWeek === '') {
+                    isAutoFilling = true;
+                    // Ensure the option exists in the dropdown before trying to set it
+                    weekSelect.tomselect.addOption({value: targetWeek, text: targetWeek});
+                    // Set it silently (true) so it doesn't trigger the 'change' event on the original select
+                    weekSelect.tomselect.setValue(targetWeek, true);
+                    isAutoFilling = false;
+                }
             }
+
+            return;
         }
         document.getElementById('res-content-std').value = '';
         document.getElementById('res-perf-std').value = '';
@@ -343,26 +365,29 @@ document.addEventListener('DOMContentLoaded', () => {
             }, false);
         });
 
+        function updateFileUI(filename) {
+            dropZoneText.innerHTML = `<span style="color:#e50914; font-weight:bold;">File Selected:</span> ${filename} <br><span style="font-size:0.8rem; color:#aaa;">(Drag another file here to replace)</span>`;
+            document.getElementById('remove-file-btn').classList.remove('hidden');
+        }
+
         dropZone.addEventListener('drop', e => {
             const dt = e.dataTransfer;
             const files = dt.files;
             if (files.length > 0) {
                 resFile.files = files;
-                dropZoneText.innerText = `Selected: ${files[0].name}`;
-                document.getElementById('remove-file-btn').classList.remove('hidden');
+                updateFileUI(files[0].name);
             }
         });
         
         resFile.addEventListener('change', () => {
             if (resFile.files.length > 0) {
-                dropZoneText.innerText = `Selected: ${resFile.files[0].name}`;
-                document.getElementById('remove-file-btn').classList.remove('hidden');
+                updateFileUI(resFile.files[0].name);
             }
         });
 
         document.getElementById('remove-file-btn').addEventListener('click', () => {
             resFile.value = '';
-            dropZoneText.innerText = 'Drag & Drop PDF or Click to Browse';
+            dropZoneText.innerHTML = 'Drag & Drop File or Click to Browse';
             document.getElementById('remove-file-btn').classList.add('hidden');
         });
     }
@@ -374,6 +399,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const actionMessage = document.getElementById('action-message');
     const closeActionModal = document.getElementById('close-action-modal');
 
+    closeActionModal?.addEventListener('click', () => {
+        actionModal.classList.add('hidden');
+        actionModal.classList.remove('active');
+        actionModal.style.setProperty('display', 'none', 'important');
+        // After a successful upload/edit, reset form and go back to upload tab
+        if(window._uploadSuccess) {
+            window._uploadSuccess = false;
+            window.resetUploadForm();
+            window.switchTab('upload-section');
+        }
+    });
+
     uploadForm?.addEventListener('submit', (e) => {
         e.preventDefault();
         
@@ -382,22 +419,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const isEditing = resId !== '';
 
         if (!isEditing && fileInput.files.length === 0) {
-            showAppModal({ title: 'Invalid File', text: 'Please select a valid PDF file for this resource.', type: 'warning', confirmText: 'Okay' });
+            showAppModal({ title: 'Invalid File', text: 'Please select a valid file for this resource.', type: 'warning', confirmText: 'Okay' });
             return;
         }
-
-        const authors = Array.from(document.querySelectorAll('.res-author')).map(i => i.value).filter(v=>v).join(', ');
-        const competenciesArray = [];
-        document.querySelectorAll('.res-comp-select').forEach(sel => {
-            if(sel.tomselect && sel.tomselect.getValue()) {
-                const opt = sel.tomselect.options[sel.tomselect.getValue()];
-                if(opt && opt.melc) competenciesArray.push(opt.melc);
-            }
-        });
-
-        const finalComp = competenciesArray.join('; ');
-        
-        const finalGrade = document.getElementById('res-grade').value === 'Others...' ? document.getElementById('res-grade-custom').value : document.getElementById('res-grade').value;
 
         const getVal = (id) => {
             const el = document.getElementById(id);
@@ -405,77 +429,133 @@ document.addEventListener('DOMContentLoaded', () => {
             return el.tomselect ? el.tomselect.getValue() : el.value;
         };
 
-        const formData = new FormData();
-        if (isEditing) formData.append('id', resId);
-        
-        formData.append('category', getVal('res-category'));
-        formData.append('title', getVal('res-title'));
-        formData.append('authors', authors);
-        formData.append('language', getVal('res-language'));
-        formData.append('grade_level', finalGrade);
-        formData.append('quarter', getVal('res-quarter'));
+        const titleVal = getVal('res-title');
+        const catVal = getVal('res-category');
+        const typeVal = getVal('res-type') || getVal('res-camp-type') || getVal('res-material-type');
+        const quarterVal = getVal('res-quarter');
         const weekVal = document.getElementById('res-week-manual').style.display !== 'none' 
             ? document.getElementById('res-week-manual').value 
             : getVal('res-week');
-        formData.append('week', weekVal);
-        formData.append('content_standards', getVal('res-content-std'));
-        formData.append('performance_standards', getVal('res-perf-std'));
-        formData.append('competencies', finalComp);
-        formData.append('description', getVal('res-desc'));
-        formData.append('learning_area', getVal('res-learning-area'));
-        formData.append('resource_type', getVal('res-type'));
-        formData.append('year_published', getVal('res-year'));
 
-        // New fields mapped to database
-        formData.append('curriculum', getVal('res-curriculum'));
-        formData.append('school_level', getVal('res-school-level'));
-        formData.append('camp_type', getVal('res-camp-type'));
-        formData.append('material_type', getVal('res-material-type'));
-        formData.append('component', getVal('res-component'));
-        formData.append('module_no', getVal('res-module-no'));
-        formData.append('code', getVal('res-code'));
-        
-        if (fileInput.files.length > 0) {
-            formData.append('file', fileInput.files[0]);
-        }
-
-        // Show Loading Modal
-        actionModal.classList.remove('hidden');
-        actionModal.classList.add('active');
-        actionModal.style.setProperty('display', 'flex', 'important');
-        actionModal.style.setProperty('opacity', '1', 'important');
-        actionModal.style.setProperty('visibility', 'visible', 'important');
-        actionModal.style.setProperty('pointer-events', 'auto', 'important');
-        actionModal.style.setProperty('z-index', '999999', 'important');
-        
-        actionSpinner.classList.remove('hidden');
-        actionCheck.classList.add('hidden');
-        closeActionModal.classList.add('hidden');
-        actionMessage.innerText = isEditing ? 'Updating Resource...' : 'Uploading Resource...';
-        actionMessage.style.color = 'white';
-
-        const actionEndpoint = isEditing ? 'edit' : 'upload';
-
-        fetch(`api/resources.php?action=${actionEndpoint}`, {
-            method: 'POST',
-            body: formData
-        })
-        .then(res => res.json())
-        .then(data => {
-            actionSpinner.classList.add('hidden');
-            closeActionModal.classList.remove('hidden');
+        const doUpload = () => {
+            const authors = Array.from(document.querySelectorAll('.res-author')).map(i => i.value).filter(v=>v).join(', ');
+            const competenciesArray = [];
+            document.querySelectorAll('.res-comp-select').forEach(sel => {
+                if(sel.tomselect && sel.tomselect.getValue()) {
+                    const opt = sel.tomselect.options[sel.tomselect.getValue()];
+                    if(opt && opt.melc) competenciesArray.push(opt.melc);
+                }
+            });
+            const finalComp = competenciesArray.join('; ');
             
-            if (data.success) {
-                actionCheck.classList.remove('hidden');
-                actionMessage.innerText = isEditing ? 'Resource Updated Successfully!' : 'Upload Successful!';
-                actionMessage.style.color = 'lightgreen';
-                confirmClearForm(true);
-                loadAdminData();
+            let finalGrade = '';
+            const gradeEl = document.getElementById('res-grade');
+            if (gradeEl.value === 'Others...') {
+                finalGrade = document.getElementById('res-grade-custom').value;
+            } else if (gradeEl.tomselect) {
+                const gValues = gradeEl.tomselect.getValue();
+                finalGrade = Array.isArray(gValues) ? gValues.join(', ') : gValues;
             } else {
-                actionMessage.innerText = `Error: ${data.message}`;
-                actionMessage.style.color = 'var(--accent-color)';
+                finalGrade = gradeEl.value;
             }
-        });
+
+            const formData = new FormData();
+            if (isEditing) formData.append('id', resId);
+            
+            formData.append('category', catVal);
+            formData.append('title', titleVal);
+            formData.append('authors', authors);
+            formData.append('language', getVal('res-language'));
+            formData.append('grade_level', finalGrade);
+            formData.append('quarter', quarterVal);
+            formData.append('week', weekVal);
+            formData.append('content_standards', getVal('res-content-std'));
+            formData.append('performance_standards', getVal('res-perf-std'));
+            formData.append('competencies', finalComp);
+            formData.append('description', getVal('res-desc'));
+            formData.append('learning_area', getVal('res-learning-area'));
+            formData.append('resource_type', typeVal);
+            formData.append('year_published', getVal('res-year'));
+
+            // New fields mapped to database
+            formData.append('curriculum', getVal('res-curriculum'));
+            formData.append('school_level', getVal('res-school-level'));
+            formData.append('key_stage', getVal('res-key-stage'));
+            formData.append('term', getVal('res-term'));
+            formData.append('camp_type', getVal('res-camp-type'));
+            formData.append('material_type', getVal('res-material-type'));
+            formData.append('component', getVal('res-component'));
+            formData.append('module_no', getVal('res-module-no'));
+            formData.append('code', getVal('res-code'));
+            
+            if (fileInput.files.length > 0) {
+                formData.append('file', fileInput.files[0]);
+            }
+
+            // Show Loading Modal
+            actionModal.classList.remove('hidden');
+            actionModal.classList.add('active');
+            actionModal.style.setProperty('display', 'flex', 'important');
+            actionModal.style.setProperty('opacity', '1', 'important');
+            actionModal.style.setProperty('visibility', 'visible', 'important');
+            actionModal.style.setProperty('pointer-events', 'auto', 'important');
+            actionModal.style.setProperty('z-index', '999999', 'important');
+            
+            actionSpinner.classList.remove('hidden');
+            actionCheck.classList.add('hidden');
+            closeActionModal.classList.add('hidden');
+            actionMessage.innerText = isEditing ? 'Updating Resource...' : 'Uploading Resource...';
+            actionMessage.style.color = 'white';
+
+            const actionEndpoint = isEditing ? 'edit' : 'upload';
+
+            fetch(`api/resources.php?action=${actionEndpoint}`, {
+                method: 'POST',
+                body: formData
+            })
+            .then(res => res.json())
+            .then(data => {
+                actionSpinner.classList.add('hidden');
+                closeActionModal.classList.remove('hidden');
+                
+                if (data.success) {
+                    actionCheck.classList.remove('hidden');
+                    actionMessage.innerText = isEditing ? 'Resource Updated Successfully! Click Okay to continue.' : 'Upload Successful! Click Okay to upload another.';
+                    actionMessage.style.color = 'lightgreen';
+                    window._uploadSuccess = true;
+                    loadAdminData();
+                } else {
+                    window._uploadSuccess = false;
+                    actionMessage.innerText = `Error: ${data.message}`;
+                    actionMessage.style.color = 'var(--accent-color)';
+                }
+            });
+        };
+
+        if (!isEditing) {
+            const isDuplicate = allResources.some(r => {
+                const sameTitle = r.title && r.title.toLowerCase() === titleVal.toLowerCase();
+                const sameCat = catVal === r.category;
+                const dbType = r.resource_type || r.camp_type || r.material_type || '';
+                const sameType = typeVal === dbType;
+                const sameQuarter = String(quarterVal) === String(r.quarter || '');
+                const sameWeek = String(weekVal) === String(r.week || '');
+                return sameTitle && sameCat && sameType && sameQuarter && sameWeek;
+            });
+            if (isDuplicate) {
+                showAppModal({
+                    title: 'Possible Duplicate File',
+                    text: 'A learning resource with this Title, Category, Type, Quarter, and Week already exists. Do you really want to proceed?',
+                    type: 'warning',
+                    confirmText: 'Yes, proceed',
+                    cancelText: 'Cancel Upload',
+                    onConfirm: () => doUpload()
+                });
+                return;
+            }
+        }
+        
+        doUpload();
     });
 
     function loadAdminData() {
@@ -495,7 +575,7 @@ document.addEventListener('DOMContentLoaded', () => {
         downloadsCategory: { period: 'day', date: '' }
     };
     const usersState = { page: 1, perPage: 10, search: '', school: '', position: '' };
-    const resourcesState = { page: 1, perPage: 10, search: '', sortDownloads: 'desc' };
+    const resourcesState = { page: 1, perPage: 10, search: '', sortBy: 'downloads_count', sortOrder: 'desc' };
     const feedbackState = { page: 1, perPage: 10 };
     const commentsState = { page: 1, perPage: 10 };
     let allUsers = [];
@@ -519,7 +599,8 @@ document.addEventListener('DOMContentLoaded', () => {
             <button class="btn btn-secondary analytics-filter-btn" data-chart="${chartKey}" data-period="week">This Week</button>
             <button class="btn btn-secondary analytics-filter-btn" data-chart="${chartKey}" data-period="month">This Month</button>
             <button class="btn btn-secondary analytics-filter-btn" data-chart="${chartKey}" data-period="year">This Year</button>
-            <input type="date" id="${dateId}" style="padding:0 0.6rem; border-radius:4px; background:#333; color:white; border:1px solid #444; outline:none; height:42px; cursor:pointer;">\n`;
+            <input type="date" id="${dateId}" style="padding:0 0.6rem; border-radius:4px; background:#333; color:white; border:1px solid #444; outline:none; height:42px; cursor:pointer;">
+            <button class="btn btn-secondary analytics-filter-btn" data-chart="${chartKey}" data-period="reset" style="background:transparent; border:1px solid #444;"><i class="fas fa-sync-alt"></i> Reset</button>\n`;
         wrapper.appendChild(controls);
     }
 
@@ -581,12 +662,25 @@ document.addEventListener('DOMContentLoaded', () => {
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                plugins: { legend: { display: false }, tooltip: { backgroundColor: '#1a1a1a', titleColor: '#fff', bodyColor: '#fff', borderColor: '#333', borderWidth: 1 } },
+                plugins: { 
+                    legend: { display: false }, 
+                    tooltip: { backgroundColor: '#1a1a1a', titleColor: '#fff', bodyColor: '#fff', borderColor: '#333', borderWidth: 1 },
+                    datalabels: { 
+                        display: (ctx) => ctx.dataset.data[ctx.dataIndex] > 0,
+                        align: 'top', 
+                        anchor: 'end',
+                        color: '#fff',
+                        offset: 4,
+                        font: { size: 10, weight: 'bold' },
+                        formatter: (val) => val
+                    }
+                },
                 scales: {
                     x: { ticks: { color: '#aaa', font: { size: 11 } }, grid: { color: 'rgba(255,255,255,0.05)' } },
-                    y: { ticks: { color: '#aaa', stepSize: 1, font: { size: 11 } }, grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true }
+                    y: { ticks: { color: '#aaa', stepSize: 1, font: { size: 11 } }, grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true, grace: '15%' }
                 }
-            }
+            },
+            plugins: [ChartDataLabels]
         }));
     }
 
@@ -599,16 +693,49 @@ document.addEventListener('DOMContentLoaded', () => {
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                plugins: { legend: { display: false }, datalabels: { anchor: 'end', align: 'top', color: '#fff', font: { weight: 'bold', size: 12 }, formatter: (val) => val > 0 ? val : '' } },
+                plugins: { 
+                    legend: { display: false }, 
+                    datalabels: { 
+                        display: (ctx) => ctx.dataset.data[ctx.dataIndex] > 0,
+                        anchor: 'end', 
+                        align: 'top', 
+                        color: '#fff', 
+                        font: { weight: 'bold', size: 12 }, 
+                        formatter: (val) => val 
+                    } 
+                },
                 scales: {
                     x: { ticks: { color: '#aaa', font: { size: 11 } }, grid: { display: false } },
-                    y: { ticks: { color: '#aaa', stepSize: 1 }, grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true, grace: '10%' }
+                    y: { ticks: { color: '#aaa', stepSize: 1 }, grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true, grace: '15%' }
                 }
-            }
+            },
+            plugins: [ChartDataLabels]
         }));
     }
 
-    function loadAnalytics() {
+    function loadAnalytics(targetChartKey = null) {
+        const palette = ['#e50914','#3498db','#2ecc71','#f39c12','#9b59b6','#1abc9c','#e67e22','#e74c3c','#34495e','#16a085'];
+
+        if (targetChartKey === 'visits') {
+            fetch(buildAnalyticsUrl(analyticsFilters.visits)).then(r => r.json()).then(data => {
+                if (data.success) renderLineChart({ get: () => chartVisits, set: (v) => chartVisits = v }, 'chart-visits-time', data.visit_time_data.map(d => d.period_label), data.visit_time_data.map(d => parseInt(d.total)), '#9b59b6', 'Visits');
+            });
+            return;
+        }
+        if (targetChartKey === 'downloadsTime') {
+            fetch(buildAnalyticsUrl(analyticsFilters.downloadsTime)).then(r => r.json()).then(data => {
+                if (data.success) renderLineChart({ get: () => chartTime, set: (v) => chartTime = v }, 'chart-downloads-time', data.time_data.map(d => d.period_label), data.time_data.map(d => parseInt(d.total)), '#e50914', 'Downloads');
+            });
+            return;
+        }
+        if (targetChartKey === 'downloadsCategory') {
+            fetch(buildAnalyticsUrl(analyticsFilters.downloadsCategory)).then(r => r.json()).then(data => {
+                if (data.success) renderBarChart({ get: () => chartCat, set: (v) => chartCat = v }, 'chart-downloads-category', data.category_data.map(d => d.category || 'Uncategorized'), data.category_data.map(d => parseInt(d.total)), palette, 'Downloads per Category');
+            });
+            return;
+        }
+
+        // Full load if no key specified
         Promise.all([
             fetch(buildAnalyticsUrl(analyticsFilters.visits)).then(r => r.json()),
             fetch(buildAnalyticsUrl(analyticsFilters.downloadsTime)).then(r => r.json()),
@@ -621,11 +748,12 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('stat-downloads').textContent = summaryData.totals.downloads;
             document.getElementById('stat-likes').textContent = summaryData.totals.likes;
             document.getElementById('stat-visits').textContent = summaryData.totals.visits;
-            const palette = ['#e50914','#3498db','#2ecc71','#f39c12','#9b59b6','#1abc9c','#e67e22','#e74c3c','#34495e','#16a085'];
+            
             renderLineChart({ get: () => chartVisits, set: (v) => chartVisits = v }, 'chart-visits-time', visitsData.visit_time_data.map(d => d.period_label), visitsData.visit_time_data.map(d => parseInt(d.total)), '#9b59b6', 'Visits');
             renderLineChart({ get: () => chartTime, set: (v) => chartTime = v }, 'chart-downloads-time', downloadsTimeData.time_data.map(d => d.period_label), downloadsTimeData.time_data.map(d => parseInt(d.total)), '#e50914', 'Downloads');
             renderBarChart({ get: () => chartCat, set: (v) => chartCat = v }, 'chart-downloads-category', downloadsCategoryData.category_data.map(d => d.category || 'Uncategorized'), downloadsCategoryData.category_data.map(d => parseInt(d.total)), palette, 'Downloads per Category');
             renderBarChart({ get: () => chartResCat, set: (v) => chartResCat = v }, 'chart-resources-category', summaryData.resources_per_category.map(d => d.category || 'Uncategorized'), summaryData.resources_per_category.map(d => parseInt(d.total)), palette, 'Resources');
+            
             const tbody = document.querySelector('#top-resources-table tbody');
             tbody.innerHTML = '';
             summaryData.top_resources.forEach((r, i) => {
@@ -647,13 +775,21 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('.analytics-filter-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             const chartKey = e.currentTarget.dataset.chart;
-            analyticsFilters[chartKey].period = e.currentTarget.dataset.period;
-            analyticsFilters[chartKey].date = '';
+            const period = e.currentTarget.dataset.period;
+            
+            if (period === 'reset') {
+                analyticsFilters[chartKey].period = 'day';
+                analyticsFilters[chartKey].date = '';
+            } else {
+                analyticsFilters[chartKey].period = period;
+                analyticsFilters[chartKey].date = '';
+            }
+            
             const dateMap = { visits: 'visits-date-filter', downloadsTime: 'downloads-time-date-filter', downloadsCategory: 'downloads-category-date-filter' };
             const dateEl = document.getElementById(dateMap[chartKey]);
             if (dateEl) dateEl.value = '';
             setActiveChartButtons(chartKey);
-            loadAnalytics();
+            loadAnalytics(chartKey);
         });
     });
 
@@ -665,7 +801,7 @@ document.addEventListener('DOMContentLoaded', () => {
             analyticsFilters[chartKey].period = 'day';
             analyticsFilters[chartKey].date = e.target.value || '';
             setActiveChartButtons(chartKey);
-            loadAnalytics();
+            loadAnalytics(chartKey);
         });
     });
 
@@ -754,7 +890,25 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderResourcesTable() {
         const tbody = document.querySelector('#resources-table tbody');
         tbody.innerHTML = '';
-        const filtered = allResources.filter(r => !resourcesState.search || (r.title || '').toLowerCase().includes(resourcesState.search)).sort((a, b) => resourcesState.sortDownloads === 'desc' ? (parseInt(b.downloads_count || 0) - parseInt(a.downloads_count || 0)) : (parseInt(a.downloads_count || 0) - parseInt(b.downloads_count || 0)));
+        const sortBy = resourcesState.sortBy;
+        const sortOrder = resourcesState.sortOrder;
+        const filtered = allResources.filter(r => !resourcesState.search || (r.title || '').toLowerCase().includes(resourcesState.search)).sort((a, b) => {
+            let valA = a[sortBy] || '';
+            let valB = b[sortBy] || '';
+            if (['downloads_count', 'likes_count'].includes(sortBy)) {
+                valA = parseInt(valA) || 0;
+                valB = parseInt(valB) || 0;
+            } else if (sortBy === 'grade_subject') {
+                valA = (a.grade_level || '') + (a.learning_area || a.subject || '');
+                valB = (b.grade_level || '') + (b.learning_area || b.subject || '');
+            } else {
+                valA = valA.toString().toLowerCase();
+                valB = valB.toString().toLowerCase();
+            }
+            if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
+            if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
+            return 0;
+        });
         const start = (resourcesState.page - 1) * resourcesState.perPage;
         const pageItems = filtered.slice(start, start + resourcesState.perPage);
         pageItems.forEach(r => {
@@ -763,6 +917,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const lrTypeText = r.resource_type || r.camp_type || r.material_type || 'N/A';
             const gradeSubj = (r.grade_level ? r.grade_level + ' - ' : '') + ((r.learning_area && r.learning_area!=='Others...') ? r.learning_area : (r.subject || ''));
             tr.innerHTML = `
+                <td style="text-align: center;" onclick="event.stopPropagation();"><input type="checkbox" class="res-batch-checkbox" value="${r.id}" onclick="window.toggleResourceBatchCheckbox()"></td>
                 <td>${catText}</td>
                 <td>${lrTypeText}</td>
                 <td><div style="max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${r.title || ''}">${r.title || 'N/A'}</div></td>
@@ -778,8 +933,12 @@ document.addEventListener('DOMContentLoaded', () => {
             tbody.appendChild(tr);
         });
         if (pageItems.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:#aaa;">No resources found.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color:#aaa;">No resources found.</td></tr>';
         }
+        
+        window.toggleResourceBatchCheckbox(); // reset batch button state
+        const selectAllChk = document.getElementById('res-select-all');
+        if(selectAllChk) selectAllChk.checked = false;
         renderPagination('resources-pagination', resourcesState.page, filtered.length, resourcesState.perPage, (page) => {
             resourcesState.page = page;
             renderResourcesTable();
@@ -802,11 +961,20 @@ document.addEventListener('DOMContentLoaded', () => {
         resourcesState.page = 1;
         renderResourcesTable();
     });
-    document.getElementById('resources-sort-downloads')?.addEventListener('click', () => {
-        resourcesState.sortDownloads = resourcesState.sortDownloads === 'desc' ? 'asc' : 'desc';
-        document.getElementById('resources-sort-downloads').textContent = `Sort Downloads: ${resourcesState.sortDownloads === 'desc' ? 'High to Low' : 'Low to High'}`;
+    window.toggleResourceSort = (field) => {
+        if (resourcesState.sortBy === field) {
+            resourcesState.sortOrder = resourcesState.sortOrder === 'asc' ? 'desc' : 'asc';
+        } else {
+            resourcesState.sortBy = field;
+            resourcesState.sortOrder = 'desc';
+        }
+        document.querySelectorAll('#resources-table th i.fas').forEach(i => i.className = 'fas fa-sort');
+        const icon = document.getElementById('sort-' + field);
+        if (icon) {
+            icon.className = resourcesState.sortOrder === 'asc' ? 'fas fa-sort-up' : 'fas fa-sort-down';
+        }
         renderResourcesTable();
-    });    
+    };
     
     window.editResource = (id) => {
         const res = allResources.find(r => r.id == id);
@@ -833,9 +1001,11 @@ document.addEventListener('DOMContentLoaded', () => {
         ensureOption('res-type', res.resource_type || res.camp_type || res.material_type);
         ensureOption('res-curriculum', res.curriculum);
         ensureOption('res-school-level', res.school_level);
+        ensureOption('res-key-stage', res.key_stage);
         ensureOption('res-learning-area', res.learning_area || res.subject);
         ensureOption('res-grade', res.grade_level);
         ensureOption('res-quarter', res.quarter);
+        ensureOption('res-term', res.term);
         ensureOption('res-language', res.language);
         ensureOption('res-year', res.year_published);
         ensureOption('res-material-type', res.material_type);
@@ -872,16 +1042,28 @@ document.addEventListener('DOMContentLoaded', () => {
         compCountObj.count = 0;
         addCompBtn.style.display = 'inline-block';
         if(res.competencies) {
-            const compList = res.competencies.split(';').map(c => c.trim());
-            compList.forEach(m => {
-                const found = (currentAvailableCompetencies || []).find(c => c.melc === m);
-                createCompSelectField(found ? found.id : '');
+            const subject = res.learning_area || res.subject || '';
+            const url = `api/competencies.php?action=unique_values&subject=${encodeURIComponent(subject)}&grade=${encodeURIComponent(res.grade_level || '')}&quarter=${encodeURIComponent(res.quarter || '')}&term=${encodeURIComponent(res.term || '')}&week=${encodeURIComponent(res.week || '')}&school_level=${encodeURIComponent(res.school_level || '')}&curriculum=${encodeURIComponent(res.curriculum || '')}&key_stage=${encodeURIComponent(res.key_stage || '')}`;
+            
+            fetch(url).then(r => r.json()).then(data => {
+                if(data.success && data.data && Array.isArray(data.data.competencies)) {
+                    currentAvailableCompetencies = data.data.competencies;
+                }
+                const compList = res.competencies.split(';').map(c => c.trim());
+                compList.forEach(m => {
+                    const found = (currentAvailableCompetencies || []).find(c => c.melc === m);
+                    createCompSelectField(found ? found.id : '');
+                });
+                
+                if(compCountObj.count === 0) {
+                    createCompSelectField();
+                }
+                updateStandardsFromAll();
             });
+        } else {
+            if(compCountObj.count === 0) createCompSelectField();
+            updateStandardsFromAll();
         }
-        if(compCountObj.count === 0) {
-            createCompSelectField();
-        }
-        updateStandardsFromAll();
     };
 
     window.cancelResourceEdit = () => {
@@ -1117,7 +1299,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // clearAction: clears field VALUES only — does NOT reset form visibility/category
     function clearAction(showAlert = false) {
-        const fields = [ 'res-title', 'res-language', 'res-grade', 'res-quarter', 'res-week', 'res-learning-area', 'res-type', 'res-year', 'res-content-std', 'res-perf-std', 'res-desc', 'res-code', 'res-module-no', 'res-curriculum', 'res-school-level', 'res-comp-select', 'res-comp' ];
+        const fields = [ 'res-title', 'res-language', 'res-key-stage', 'res-grade', 'res-quarter', 'res-term', 'res-week', 'res-learning-area', 'res-type', 'res-year', 'res-content-std', 'res-perf-std', 'res-desc', 'res-code', 'res-module-no', 'res-curriculum', 'res-school-level', 'res-comp-select', 'res-comp' ];
         fields.forEach(id => {
             const el = document.getElementById(id);
             if(el) { if(el.tagName === 'SELECT' && el.tomselect) el.tomselect.setValue(''); else el.value = ''; }
@@ -1151,20 +1333,26 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('upload-submit-btn').innerHTML = '<i class="fas fa-plus"></i> Submit Resource';
     };
 
-    window.compState = { page: 1, limit: 15, search: '', grade: '', subject: '', quarter: '', week: '', curriculum: '', school_level: '' };
+    if (!window.compState) window.compState = { page: 1, limit: 15, search: '', grade: '', subject: '', quarter: '', term: '', week: '', curriculum: '', school_level: '', key_stage: '' };
     window.allCompetencies = [];
     window.loadCompetencies = () => {
-        fetch(`api/competencies.php?action=list&page=${window.compState.page}&limit=${window.compState.limit}&search=${encodeURIComponent(window.compState.search)}&grade=${encodeURIComponent(window.compState.grade)}&subject=${encodeURIComponent(window.compState.subject)}&quarter=${encodeURIComponent(window.compState.quarter)}&week=${encodeURIComponent(window.compState.week)}&curriculum=${encodeURIComponent(window.compState.curriculum)}&school_level=${encodeURIComponent(window.compState.school_level)}`).then(res => res.json()).then(data => { if (data.success) { window.allCompetencies = data.competencies; renderCompetenciesTable(data.total); } });
+        fetch(`api/competencies.php?action=list&page=${window.compState.page}&limit=${window.compState.limit}&search=${encodeURIComponent(window.compState.search)}&grade=${encodeURIComponent(window.compState.grade)}&subject=${encodeURIComponent(window.compState.subject)}&quarter=${encodeURIComponent(window.compState.quarter)}&term=${encodeURIComponent(window.compState.term)}&week=${encodeURIComponent(window.compState.week)}&curriculum=${encodeURIComponent(window.compState.curriculum)}&school_level=${encodeURIComponent(window.compState.school_level)}&key_stage=${encodeURIComponent(window.compState.key_stage)}`).then(res => res.json()).then(data => { if (data.success) { window.allCompetencies = data.competencies; renderCompetenciesTable(data.total); } });
     };
 
     function renderCompetenciesTable(totalItems) {
         const tbody = document.querySelector('#comp-table tbody'); if (!tbody) return; tbody.innerHTML = '';
         window.allCompetencies.forEach(c => {
             const tr = document.createElement('tr'); tr.style.cursor = 'pointer'; tr.onclick = (e) => { if (e.target.tagName !== 'BUTTON' && e.target.tagName !== 'I') editCompetency(c.id); };
-            tr.innerHTML = `<td>${c.curriculum || '-'}</td><td>${c.code || '-'}</td><td>${c.subject || '-'}</td><td>${c.school_level || '-'}</td><td>${c.grade_level || '-'}</td><td>${c.quarter_term || '-'}</td><td><div style="max-height: 50px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;" title="${c.melc || ''}">${c.melc || '-'}</div></td>`;
+            const ksLabel = c.key_stage ? `KS ${c.key_stage}` : '';
+            const grLabel = c.grade_level ? `G${c.grade_level}` : '';
+            const ksGrLabel = [ksLabel, grLabel].filter(Boolean).join(' / ') || '-';
+            const qCode = c.quarter ? `<span style="color:#3498db;font-weight:bold;">Q${c.quarter}</span>` : '';
+            const tCode = c.term ? `<span style="color:#e67e22;font-weight:bold;">T${c.term}</span>` : '';
+            const qtLabel = [qCode, tCode].filter(Boolean).join(' / ') || '-';
+            tr.innerHTML = `<td>${c.curriculum || '-'}</td><td>${c.code || '-'}</td><td>${c.subject || '-'}</td><td>${c.school_level || '-'}</td><td>${ksGrLabel}</td><td>${qtLabel}</td><td>${c.week || '-'}</td><td><div style="max-height: 50px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;" title="${c.melc || ''}">${c.melc || '-'}</div></td>`;
             tbody.appendChild(tr);
         });
-        if (allCompetencies.length === 0) tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:#aaa;">No competencies found.</td></tr>';
+        if (allCompetencies.length === 0) tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color:#aaa;">No competencies found.</td></tr>';
         renderPagination('comp-pagination', window.compState.page, totalItems, window.compState.limit, (page) => { window.compState.page = page; loadCompetencies(); });
     }
 
@@ -1175,7 +1363,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     window.editCompetency = (id) => {
         const c = window.allCompetencies.find(comp => comp.id == id); if (!c) return;
-        document.getElementById('comp-id').value = c.id; document.getElementById('comp-curriculum').value = c.curriculum || ''; document.getElementById('comp-school-level').value = c.school_level || ''; document.getElementById('comp-grade').value = c.grade_level || ''; document.getElementById('comp-subject').value = c.subject || ''; document.getElementById('comp-quarter').value = c.quarter_term || ''; document.getElementById('comp-week').value = c.week || ''; document.getElementById('comp-code').value = c.code || ''; document.getElementById('comp-melc').value = c.melc || ''; document.getElementById('comp-content-std').value = c.content_std || ''; document.getElementById('comp-perf-std').value = c.performance_std || '';
+        document.getElementById('comp-id').value = c.id; document.getElementById('comp-curriculum').value = c.curriculum || ''; document.getElementById('comp-school-level').value = c.school_level || ''; document.getElementById('comp-key-stage').value = c.key_stage || ''; document.getElementById('comp-grade').value = c.grade_level || ''; document.getElementById('comp-subject').value = c.subject || ''; document.getElementById('comp-quarter').value = c.quarter || ''; document.getElementById('comp-term').value = c.term || ''; document.getElementById('comp-week').value = c.week || ''; document.getElementById('comp-code').value = c.code || ''; document.getElementById('comp-melc').value = c.melc || ''; document.getElementById('comp-content-std').value = c.content_std || ''; document.getElementById('comp-perf-std').value = c.performance_std || '';
         document.getElementById('comp-modal-title').innerText = 'Edit Competency'; document.getElementById('comp-delete-btn').classList.remove('hidden'); document.getElementById('comp-modal').classList.remove('hidden'); document.getElementById('comp-modal').classList.add('active');
     };
 
@@ -1184,22 +1372,35 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.getElementById('comp-form')?.addEventListener('submit', (e) => {
         e.preventDefault();
-        const data = { id: document.getElementById('comp-id').value, curriculum: document.getElementById('comp-curriculum').value, school_level: document.getElementById('comp-school-level').value, grade_level: document.getElementById('comp-grade').value, subject: document.getElementById('comp-subject').value, quarter_term: document.getElementById('comp-quarter').value, week: document.getElementById('comp-week').value, code: document.getElementById('comp-code').value, melc: document.getElementById('comp-melc').value, content_std: document.getElementById('comp-content-std').value, performance_std: document.getElementById('comp-perf-std').value };
+        const data = { id: document.getElementById('comp-id').value, curriculum: document.getElementById('comp-curriculum').value, school_level: document.getElementById('comp-school-level').value, key_stage: document.getElementById('comp-key-stage').value, grade_level: document.getElementById('comp-grade').value, subject: document.getElementById('comp-subject').value, quarter: document.getElementById('comp-quarter').value, term: document.getElementById('comp-term').value, week: document.getElementById('comp-week').value, code: document.getElementById('comp-code').value, melc: document.getElementById('comp-melc').value, content_std: document.getElementById('comp-content-std').value, performance_std: document.getElementById('comp-perf-std').value };
         const action = data.id ? 'edit' : 'add';
         fetch(`api/competencies.php?action=${action}`, { method: 'POST', body: JSON.stringify(data), headers: {'Content-Type': 'application/json'} }).then(res => res.json()).then(resData => { if (resData.success) { closeCompModal(); loadCompetencies(); } else { showAppModal({ title: 'Request Failed', text: 'Error processing request: ' + resData.message, type: 'danger', confirmText: 'Okay' }); } });
     });
 
 // --- Upload Form Dynamic Logic ---
 let isAutoFilling = false;
-const uploadDynamicGroups = [ 'group-type', 'group-curriculum', 'group-school-level', 'group-camp-type', 'group-material-type', 'group-learning-area', 'group-component', 'group-title', 'group-grade', 'group-module-no', 'group-authors', 'group-language', 'group-quarter-week', 'group-quarter', 'group-week', 'group-comp', 'group-code', 'group-content-std', 'group-perf-std', 'group-year', 'group-desc', 'group-file' ];
+const uploadDynamicGroups = [ 'group-type', 'group-curriculum', 'group-school-level', 'group-key-stage', 'group-camp-type', 'group-material-type', 'group-learning-area', 'group-component', 'group-title', 'group-grade', 'group-module-no', 'group-authors', 'group-language', 'group-qtw', 'group-quarter-week', 'group-quarter', 'group-term', 'group-week', 'group-comp', 'group-code', 'group-content-std', 'group-perf-std', 'group-year', 'group-desc', 'group-file' ];
 
 // ===== TomSelect Helpers =====
 function updateTomSelect(elId, htmlContent, valToSet = '') {
     const el = document.getElementById(elId); if(!el) return;
     if(el.tomselect) el.tomselect.destroy();
     if(htmlContent !== null) el.innerHTML = htmlContent;
-    new TomSelect(el, { create: false });
-    if(valToSet) { if(el.tomselect) el.tomselect.setValue(valToSet); else el.value = valToSet; }
+    
+    const config = { create: false };
+    if (elId === 'res-grade') {
+        config.plugins = ['remove_button'];
+        config.maxItems = null; // Explicitly allow multiple items
+    }
+    
+    new TomSelect(el, config);
+    if(valToSet) { 
+        if(el.tomselect) {
+            if (Array.isArray(valToSet)) el.tomselect.setValue(valToSet);
+            else if (valToSet.includes(',')) el.tomselect.setValue(valToSet.split(','));
+            else el.tomselect.setValue(valToSet);
+        } else { el.value = valToSet; } 
+    }
 }
 
 function setTSValue(id, value) {
@@ -1222,7 +1423,14 @@ function resetTSOptions(id, defaultText) {
     const el = document.getElementById(id); if(!el) return;
     if(el.tomselect) el.tomselect.destroy();
     el.innerHTML = `<option value="">${defaultText}</option>`;
-    new TomSelect(el, { create: false });
+    
+    const config = { create: false };
+    if (id === 'res-grade') {
+        config.plugins = ['remove_button'];
+        config.maxItems = null; // Explicitly allow multiple items
+    }
+    
+    new TomSelect(el, config);
 }
 
 // ===== Category → Curriculum auto-set & Type options =====
@@ -1246,47 +1454,122 @@ document.getElementById('res-category')?.addEventListener('change', function() {
     let html = '<option value="">Select Type...</option>';
     types.forEach(t => { html += `<option value="${t}">${t}</option>`; });
     updateTomSelect('res-type', html);
+    
+    // Set material type options based on category if independent of type
+    let matHtml = '<option value="">Select...</option>';
+    if (cat === 'National Reading Program (NRP)') {
+        ['Lesson Script', 'Intervention', 'Enhancement', 'Consolidated'].forEach(t => { matHtml += `<option value="${t}">${t}</option>`; });
+    }
+    updateTomSelect('res-material-type', matHtml);
 
     cascadeClear('category');
     updateFormVisibility();
 });
 
-document.getElementById('res-type')?.addEventListener('change', updateFormVisibility);
+document.getElementById('res-type')?.addEventListener('change', function() {
+    const cat = document.getElementById('res-category')?.value || '';
+    const type = this.value;
+    
+    if (cat === 'Contextualized Learning Resources (CLRs)') {
+        let matTypes = [];
+        if (type === 'School Developed Text-based Materials') {
+            matTypes = ['SLM', 'SIM', 'Storybook', 'Worksheet', 'Activity Sheet', 'Module', 'LAS (Learning Activity Sheets)'];
+        } else if (type === 'Ivatan Textbooks') {
+            matTypes = ['Textbook', 'Teachers Guide', 'Primer'];
+        } else if (type === 'Digital Learning Resources') {
+            matTypes = ['Audio', 'Video', 'Presentation (PPT)', 'Image/Graphics'];
+        }
+        
+        let matHtml = '<option value="">Select...</option>';
+        matTypes.forEach(t => { matHtml += `<option value="${t}">${t}</option>`; });
+        updateTomSelect('res-material-type', matHtml);
+    }
+    
+    updateFormVisibility();
+});
 document.getElementById('res-material-type')?.addEventListener('change', updateFormVisibility);
+
+document.getElementById('res-grade')?.addEventListener('change', function() {
+    const custom = document.getElementById('res-grade-custom');
+    if(!custom) return;
+    if(this.value === 'Others...') {
+        custom.style.display = 'block';
+        custom.required = true;
+    } else {
+        custom.style.display = 'none';
+        custom.required = false;
+    }
+});
 
 // ===== Form Visibility =====
 function updateFormVisibility() {
     const cat  = document.getElementById('res-category')?.value || '';
     const type = document.getElementById('res-type')?.value    || '';
+    const matType = document.getElementById('res-material-type')?.value || '';
+    
     let toShow = ['group-file'];
-    if(cat) toShow.push('group-type', 'group-title', 'group-curriculum');
-    if(cat && type) {
-        if(cat === 'MATATAG Curriculum Resources') {
-            toShow.push('group-school-level', 'group-learning-area', 'group-grade');
-            if(type.includes('LEs') || type.includes('LAS')) toShow.push('group-quarter-week', 'group-quarter', 'group-week', 'group-comp', 'group-content-std', 'group-perf-std', 'group-code');
-        } else if(cat === 'K to 12 Curriculum Resources') {
-            toShow.push('group-school-level', 'group-learning-area', 'group-grade', 'group-module-no', 'group-quarter-week', 'group-quarter', 'group-week', 'group-comp', 'group-content-std', 'group-perf-std', 'group-code');
-        } else if(cat === 'Contextualized Learning Resources (CLRs)') {
-            toShow.push('group-material-type', 'group-school-level', 'group-learning-area', 'group-authors', 'group-language', 'group-grade', 'group-comp', 'group-content-std', 'group-perf-std', 'group-code', 'group-desc', 'group-year');
-        } else if(cat === 'National Learning Camp (NLC)') {
-            toShow.push('group-material-type', 'group-school-level', 'group-quarter-week', 'group-week', 'group-learning-area', 'group-grade');
-        } else if(cat === 'National Reading Program (NRP)') {
-            toShow.push('group-material-type', 'group-school-level', 'group-quarter-week', 'group-quarter', 'group-week', 'group-learning-area', 'group-grade');
+    if(cat) {
+        toShow.push('group-type', 'group-title', 'group-curriculum', 'group-school-level', 'group-learning-area', 'group-grade', 'group-language');
+        
+        // Quarter/Term/Week visibility
+        if (cat === 'National Learning Camp (NLC)' || cat === 'National Reading Program (NRP)') {
+            toShow.push('group-quarter', 'group-week'); // NRP/NLC usually use week-based
+            // Show manual week input if needed (logic from previous turns)
+            const weekManual = document.getElementById('res-week-manual');
+            if (weekManual) weekManual.style.display = 'block';
+            const weekSelect = document.getElementById('group-week')?.querySelector('.ts-wrapper');
+            if (weekSelect) weekSelect.style.display = 'none';
+        } else {
+            toShow.push('group-qtw', 'group-quarter', 'group-term', 'group-week');
+            const weekManual = document.getElementById('res-week-manual');
+            if (weekManual) weekManual.style.display = 'none';
+            const weekSelect = document.getElementById('group-week')?.querySelector('.ts-wrapper');
+            if (weekSelect) weekSelect.style.display = 'block';
         }
     }
-    uploadDynamicGroups.forEach(id => { const el = document.getElementById(id); if(el) el.style.display = toShow.includes(id) ? 'block' : 'none'; });
+
+    if(cat && type) {
+        if(cat === 'MATATAG Curriculum Resources') {
+            toShow.push('group-key-stage');
+            if(type.includes('LEs') || type.includes('LAS')) {
+                toShow.push('group-comp', 'group-content-std', 'group-perf-std', 'group-code');
+            }
+        } else if(cat === 'K to 12 Curriculum Resources') {
+            toShow.push('group-key-stage');
+            if(type.includes('SLMs')) toShow.push('group-module-no', 'group-component');
+            toShow.push('group-comp', 'group-content-std', 'group-perf-std', 'group-code');
+        } else if(cat === 'Contextualized Learning Resources (CLRs)') {
+            toShow.push('group-material-type', 'group-authors', 'group-desc', 'group-year');
+            toShow.push('group-comp', 'group-content-std', 'group-perf-std', 'group-code');
+        } else if(cat === 'National Learning Camp (NLC)') {
+            toShow.push('group-camp-type', 'group-desc');
+        } else if(cat === 'National Reading Program (NRP)') {
+            toShow.push('group-material-type', 'group-desc');
+        }
+    }
+
+    // If LR type is BoW, remove quarter, term, week
+    if (type && type.includes('BoW')) {
+        toShow = toShow.filter(id => !['group-qtw', 'group-quarter', 'group-term', 'group-week'].includes(id));
+    }
+
+    uploadDynamicGroups.forEach(id => {
+        const el = document.getElementById(id);
+        if(el) el.style.display = toShow.includes(id) ? 'block' : 'none';
+    });
 }
 
 // ===== Cascade Clear (clears all fields downstream of changed level) =====
-// Correct hierarchy: school_level > grade > learning_area > quarter > week > comp
 function cascadeClear(level) {
-    const order = ['category', 'school_level', 'grade', 'learning_area', 'quarter', 'week', 'comp'];
+    const order = ['category', 'school_level', 'key_stage', 'grade', 'learning_area', 'quarter', 'term', 'week', 'comp'];
     const idx = order.indexOf(level);
     if(idx < 0) return;
     if(idx <= order.indexOf('school_level'))  { clearTSValue('res-school-level'); }
+    if(idx <= order.indexOf('key_stage'))     { clearTSValue('res-key-stage'); resetTSOptions('res-key-stage', 'Select Key Stage...'); }
     if(idx <= order.indexOf('grade'))         { clearTSValue('res-grade'); resetTSOptions('res-grade', 'Select Grade...'); }
     if(idx <= order.indexOf('learning_area')) { clearTSValue('res-learning-area'); resetTSOptions('res-learning-area', 'Select Area...'); }
     if(idx <= order.indexOf('quarter'))       { clearTSValue('res-quarter'); resetTSOptions('res-quarter', 'Select Quarter...'); }
+    if(idx <= order.indexOf('term'))          { clearTSValue('res-term'); resetTSOptions('res-term', 'Select Term...'); }
     if(idx <= order.indexOf('week'))          { clearTSValue('res-week'); resetTSOptions('res-week', 'Select Week...'); currentAvailableCompetencies = []; refreshCompDropdowns(); }
     if(idx <= order.indexOf('comp'))          {
         document.getElementById('res-content-std').value = '';
@@ -1299,32 +1582,80 @@ function cascadeClear(level) {
 // ===== Build API URL with current form state =====
 function buildUploadUrl() {
     const subject    = document.getElementById('res-learning-area')?.value || '';
-    const grade      = document.getElementById('res-grade')?.value         || '';
+    
+    const gradeSelect = document.getElementById('res-grade');
+    let grade = '';
+    if (gradeSelect && gradeSelect.tomselect) {
+        const vals = gradeSelect.tomselect.getValue();
+        grade = Array.isArray(vals) ? (vals[0] || '') : vals;
+    } else {
+        grade = gradeSelect?.value || '';
+    }
+
     const quarter    = document.getElementById('res-quarter')?.value       || '';
+    const term       = document.getElementById('res-term')?.value          || '';
     const week       = document.getElementById('res-week')?.value          || '';
     const schoolLevel= document.getElementById('res-school-level')?.value  || '';
     const curriculum = document.getElementById('res-curriculum')?.value    || '';
-    return `api/competencies.php?action=unique_values&subject=${encodeURIComponent(subject)}&grade=${encodeURIComponent(grade)}&quarter=${encodeURIComponent(quarter)}&week=${encodeURIComponent(week)}&school_level=${encodeURIComponent(schoolLevel)}&curriculum=${encodeURIComponent(curriculum)}`;
+    const keyStage   = document.getElementById('res-key-stage')?.value     || '';
+    return `api/competencies.php?action=unique_values&subject=${encodeURIComponent(subject)}&grade=${encodeURIComponent(grade)}&quarter=${encodeURIComponent(quarter)}&term=${encodeURIComponent(term)}&week=${encodeURIComponent(week)}&school_level=${encodeURIComponent(schoolLevel)}&curriculum=${encodeURIComponent(curriculum)}&key_stage=${encodeURIComponent(keyStage)}`;
 }
 
-// ===== Fetch options and populate a select field =====
-function fetchAndPopulate(fieldId, defaultText) {
-    const el = document.getElementById(fieldId); if(!el) return Promise.resolve();
+// ===== Fetch options and populate multiple downstream select fields =====
+function fetchAndPopulateDownstream(level) {
     const url = buildUploadUrl();
     return fetch(url).then(r => r.json()).then(data => {
         if(!data.success || !data.data) return;
-        let options = [];
-        if(fieldId === 'res-learning-area') options = data.data.subjects;
-        else if(fieldId === 'res-grade')    options = data.data.grades;
-        else if(fieldId === 'res-quarter')  options = data.data.quarters;
-        else if(fieldId === 'res-week')     options = data.data.weeks;
+        
+        const setOpts = (id, options, defaultText) => {
+            const el = document.getElementById(id);
+            if (!el || !options) return;
+            
+            // Keep track of previously selected value to maintain selection if applicable
+            const prevVal = el.tomselect ? el.tomselect.getValue() : el.value;
+            
+            let html = `<option value="">${defaultText}</option>`;
+            const realOpts = options.filter(opt => opt && opt.trim() !== '' && opt !== '#N/A' && opt !== 'N/A');
+            realOpts.forEach(opt => { html += `<option value="${opt}">${opt}</option>`; });
+            
+            // For Grade Level, add "Others..." option
+            if (id === 'res-grade') {
+                html += '<option value="Others...">Others...</option>';
+            }
 
-        let html = `<option value="">${defaultText}</option>`;
-        options.forEach(opt => { if(opt) html += `<option value="${opt}">${opt}</option>`; });
-        updateTomSelect(fieldId, html);
+            updateTomSelect(id, html);
+            
+            // Autofill logic requested by user:
+            if (realOpts.length === 1) {
+                if (el.tomselect) el.tomselect.setValue(realOpts[0], true);
+                else el.value = realOpts[0];
+            } else if (prevVal && realOpts.includes(prevVal)) {
+                // Restore previous selection if it's still valid
+                if (el.tomselect) el.tomselect.setValue(prevVal, true);
+                else el.value = prevVal;
+            }
+        };
 
-        // If competencies returned (week set), update the MELC dropdowns
-        if(Array.isArray(data.data.competencies) && data.data.competencies.length >= 0) {
+        const order = ['category', 'school_level', 'key_stage', 'grade', 'learning_area', 'quarter', 'term', 'week', 'comp'];
+        const idx = order.indexOf(level);
+        
+        // Populate downwards:
+        if(idx <= order.indexOf('school_level'))  setOpts('res-key-stage', data.data.key_stages, 'Select Key Stage...');
+        if(idx <= order.indexOf('key_stage'))     setOpts('res-grade', data.data.grades, 'Select Grade...');
+        if(idx <= order.indexOf('grade'))         setOpts('res-learning-area', data.data.subjects, 'Select Area...');
+        if(idx <= order.indexOf('learning_area')) setOpts('res-quarter', data.data.quarters, 'Select Quarter...');
+        if(idx <= order.indexOf('learning_area')) setOpts('res-term', data.data.terms, 'Select Term...');
+        if(idx <= order.indexOf('quarter') || idx <= order.indexOf('term')) setOpts('res-week', data.data.weeks, 'Select Week...');
+        
+        // Autofill logic (Populates laterally/upwards if unambiguous):
+        if(idx >= order.indexOf('grade') && level !== 'key_stage') setOpts('res-key-stage', data.data.key_stages, 'Select Key Stage...');
+        if((idx >= order.indexOf('quarter') || idx >= order.indexOf('term')) && level !== 'quarter' && level !== 'term') {
+            setOpts('res-quarter', data.data.quarters, 'Select Quarter...');
+            setOpts('res-term', data.data.terms, 'Select Term...');
+        }
+
+        // Always refresh competencies based on latest filters
+        if(Array.isArray(data.data.competencies)) {
             currentAvailableCompetencies = data.data.competencies;
             refreshCompDropdowns();
         }
@@ -1332,48 +1663,50 @@ function fetchAndPopulate(fieldId, defaultText) {
 }
 
 // ===== Cascade Event Listeners =====
-// Hierarchy: School Level > Grade Level > Learning Area > Quarter > Week > MELC
+// Hierarchy: School Level > Key Stage > Grade Level > Learning Area > Quarter > Term > Week > MELC
 document.getElementById('res-school-level')?.addEventListener('change', function() {
     if(isAutoFilling) return;
+    cascadeClear('key_stage');
+    fetchAndPopulateDownstream('school_level');
+});
+
+document.getElementById('res-key-stage')?.addEventListener('change', function() {
+    if(isAutoFilling) return;
     cascadeClear('grade');
-    fetchAndPopulate('res-grade', 'Select Grade...');
+    fetchAndPopulateDownstream('key_stage');
 });
 
 document.getElementById('res-grade')?.addEventListener('change', function() {
     if(isAutoFilling) return;
     cascadeClear('learning_area');
-    fetchAndPopulate('res-learning-area', 'Select Area...');
+    fetchAndPopulateDownstream('grade');
 });
 
 document.getElementById('res-learning-area')?.addEventListener('change', function() {
     if(isAutoFilling) return;
     cascadeClear('quarter');
-    fetchAndPopulate('res-quarter', 'Select Quarter...');
+    fetchAndPopulateDownstream('learning_area');
 });
 
 document.getElementById('res-quarter')?.addEventListener('change', function() {
     if(isAutoFilling) return;
     cascadeClear('week');
-    fetchAndPopulate('res-week', 'Select Week...');
+    fetchAndPopulateDownstream('quarter');
+});
+
+document.getElementById('res-term')?.addEventListener('change', function() {
+    if(isAutoFilling) return;
+    cascadeClear('week');
+    fetchAndPopulateDownstream('term');
 });
 
 document.getElementById('res-week')?.addEventListener('change', function() {
     if(isAutoFilling) return;
-    // Week changed: clear MELCs and fetch new ones
-    currentAvailableCompetencies = [];
-    refreshCompDropdowns();
-    document.getElementById('res-content-std').value = '';
-    document.getElementById('res-perf-std').value = '';
-    document.getElementById('res-code').value = '';
-    document.getElementById('res-comp').value = '';
-    // Fetch week-specific MELCs using current form context
-    fetch(buildUploadUrl()).then(r => r.json()).then(data => {
-        if(data.success && data.data && Array.isArray(data.data.competencies)) {
-            currentAvailableCompetencies = data.data.competencies;
-            refreshCompDropdowns();
-        }
-    });
+    cascadeClear('comp');
+    fetchAndPopulateDownstream('week');
 });
+
+
 
 // ===== Code Field: Auto-fill =====
 document.getElementById('res-code')?.addEventListener('change', function() {
@@ -1394,16 +1727,18 @@ function applyCompetencyToForm(c) {
     isAutoFilling = true;
     setTSValue('res-curriculum',    c.curriculum);
     setTSValue('res-school-level',  c.school_level);
+    setTSValue('res-key-stage',     c.key_stage);
     setTSValue('res-learning-area', c.subject);
     setTSValue('res-grade',         c.grade_level);
-    setTSValue('res-quarter',       c.quarter_term);
+    setTSValue('res-quarter',       c.quarter);
+    setTSValue('res-term',          c.term);
     setTSValue('res-week',          c.week);
     document.getElementById('res-comp').value         = c.melc || '';
     document.getElementById('res-content-std').value  = c.content_std || '';
     document.getElementById('res-perf-std').value     = c.performance_std || '';
     document.getElementById('res-code').value         = c.code || '';
 
-    const url = `api/competencies.php?action=unique_values&subject=${encodeURIComponent(c.subject||'')}&grade=${encodeURIComponent(c.grade_level||'')}&quarter=${encodeURIComponent(c.quarter_term||'')}&week=${encodeURIComponent(c.week||'')}&school_level=${encodeURIComponent(c.school_level||'')}&curriculum=${encodeURIComponent(c.curriculum||'')}`;
+    const url = `api/competencies.php?action=unique_values&subject=${encodeURIComponent(c.subject||'')}&grade=${encodeURIComponent(c.grade_level||'')}&quarter=${encodeURIComponent(c.quarter||'')}&term=${encodeURIComponent(c.term||'')}&week=${encodeURIComponent(c.week||'')}&school_level=${encodeURIComponent(c.school_level||'')}&curriculum=${encodeURIComponent(c.curriculum||'')}&key_stage=${encodeURIComponent(c.key_stage||'')}`;
     fetch(url).then(r => r.json()).then(data => {
         if(data.success && data.data.competencies) {
             currentAvailableCompetencies = data.data.competencies;
@@ -1439,8 +1774,8 @@ function showCodePickerModal(rows, onChoose) {
     rows.forEach((r, i) => {
         html += `<div data-pick-idx="${i}" style="cursor:pointer;border:1px solid #333;border-radius:8px;padding:12px;margin-bottom:10px;transition:border-color 0.2s,background 0.2s;">
             <div style="color:#fff;font-weight:bold;margin-bottom:4px;line-height:1.4;">${r.melc || 'N/A'}</div>
-            <div style="color:#aaa;font-size:0.82rem;">📚 ${r.curriculum||'-'} &nbsp;|&nbsp; 🏫 ${r.school_level||'-'} &nbsp;|&nbsp; 📗 Grade ${r.grade_level||'-'} &nbsp;|&nbsp; ${r.subject||'-'}</div>
-            <div style="color:#aaa;font-size:0.82rem;margin-top:2px;">📅 Q${r.quarter_term||'-'} Week ${r.week||'-'} &nbsp;|&nbsp; Code: <strong style="color:#e50914;">${r.code||'-'}</strong></div>
+            <div style="color:#aaa;font-size:0.82rem;">📚 ${r.curriculum||'-'} &nbsp;|&nbsp; Key Stage: ${r.key_stage||'-'} &nbsp;|&nbsp; 🏫 ${r.school_level||'-'} &nbsp;|&nbsp; 📗 Grade ${r.grade_level||'-'} &nbsp;|&nbsp; ${r.subject||'-'}</div>
+            <div style="color:#aaa;font-size:0.82rem;margin-top:2px;">📅 Q${r.quarter||'-'} T${r.term||'-'} Week ${r.week||'-'} &nbsp;|&nbsp; Code: <strong style="color:#e50914;">${r.code||'-'}</strong></div>
         </div>`;
     });
     html += `<button id="code-picker-cancel" style="margin-top:6px;background:#2a2a2a;border:1px solid #444;color:#aaa;padding:8px 20px;border-radius:6px;cursor:pointer;">Cancel</button>`;
@@ -1484,14 +1819,16 @@ window.importCompCSV = (input) => {
 // ============================================================
 // Manage Competencies Tab - Filters (FINAL FIX)
 // ============================================================
-if(!window.compState) window.compState = { page: 1, limit: 15, search: '', grade: '', subject: '', quarter: '', week: '', curriculum: '', school_level: '' };
+if(!window.compState) window.compState = { page: 1, limit: 15, search: '', grade: '', subject: '', quarter: '', term: '', week: '', curriculum: '', school_level: '', key_stage: '' };
 
 const filterElementsMap = {
     'comp-filter-curriculum':   'curriculum',
     'comp-filter-school-level': 'school_level',
+    'comp-filter-key-stage':    'key_stage',
     'comp-filter-grade':        'grade',
     'comp-filter-subject':      'subject',
     'comp-filter-quarter':      'quarter',
+    'comp-filter-term':         'term',
     'comp-filter-week':         'week'
 };
 
@@ -1508,7 +1845,7 @@ Object.entries(filterElementsMap).forEach(([id, stateKey]) => {
 
 window.updateCompFilterDropdowns = () => {
     const s = window.compState;
-    const url = `api/competencies.php?action=unique_values&grade=${encodeURIComponent(s.grade)}&subject=${encodeURIComponent(s.subject)}&quarter=${encodeURIComponent(s.quarter)}&week=${encodeURIComponent(s.week)}&curriculum=${encodeURIComponent(s.curriculum)}&school_level=${encodeURIComponent(s.school_level)}`;
+    const url = `api/competencies.php?action=unique_values&grade=${encodeURIComponent(s.grade)}&subject=${encodeURIComponent(s.subject)}&quarter=${encodeURIComponent(s.quarter)}&term=${encodeURIComponent(s.term)}&week=${encodeURIComponent(s.week)}&curriculum=${encodeURIComponent(s.curriculum)}&school_level=${encodeURIComponent(s.school_level)}&key_stage=${encodeURIComponent(s.key_stage)}`;
     fetch(url).then(r => r.json()).then(data => {
         if(!data.success || !data.data) return;
         const setOpts = (id, options, defaultLabel) => {
@@ -1521,15 +1858,40 @@ window.updateCompFilterDropdowns = () => {
         };
         setOpts('comp-filter-curriculum',   data.data.curriculums,   'All Curriculums');
         setOpts('comp-filter-school-level', data.data.school_levels, 'All School Levels');
+        setOpts('comp-filter-key-stage',    data.data.key_stages,    'All Key Stages');
         setOpts('comp-filter-grade',        data.data.grades,        'All Grades');
         setOpts('comp-filter-subject',      data.data.subjects,      'All Subjects');
-        setOpts('comp-filter-quarter',      data.data.quarters,      'All Quarter/Terms');
+        setOpts('comp-filter-quarter',      data.data.quarters,      'All Quarters');
+        setOpts('comp-filter-term',         data.data.terms,         'All Terms');
         setOpts('comp-filter-week',         data.data.weeks,         'All Weeks');
     });
 };
 
 // Populate filters on load
 updateCompFilterDropdowns();
+
+window.confirmClearAllCompetencies = () => {
+    showAppModal({
+        title: 'Clear All Competencies',
+        text: 'Are you sure you want to delete all learning competencies? This action cannot be undone.',
+        type: 'danger',
+        confirmText: 'Clear All'
+    }).then(confirmed => {
+        if(confirmed) {
+            fetch('api/competencies.php?action=truncate', { method: 'POST' })
+                .then(r => r.json())
+                .then(data => {
+                    if(data.success) {
+                        loadCompetencies();
+                    }
+                });
+        }
+    });
+};
+
+window.confirmImportCSV = () => {
+    document.getElementById('comp-csv-upload').click();
+};
 
 // ============================================================
 // Manage Resources - Filter Dropdowns
@@ -1556,5 +1918,63 @@ function updateResourceFilters() {
         });
 }
 updateResourceFilters();
+
+// ============================================================
+// Batch Delete Functionality for Resources
+// ============================================================
+window.toggleSelectAllResources = (el) => {
+    const isChecked = el.checked;
+    document.querySelectorAll('.res-batch-checkbox').forEach(chk => {
+        chk.checked = isChecked;
+    });
+    window.toggleResourceBatchCheckbox();
+};
+
+window.toggleResourceBatchCheckbox = () => {
+    const checkedCount = document.querySelectorAll('.res-batch-checkbox:checked').length;
+    const btn = document.getElementById('resources-batch-delete-btn');
+    if (btn) {
+        if (checkedCount > 0) {
+            btn.classList.remove('hidden');
+            btn.innerHTML = `<i class="fas fa-trash-alt"></i> Delete Selected (${checkedCount})`;
+        } else {
+            btn.classList.add('hidden');
+        }
+    }
+    
+    const selectAllChk = document.getElementById('res-select-all');
+    if (selectAllChk) {
+        const totalCount = document.querySelectorAll('.res-batch-checkbox').length;
+        selectAllChk.checked = (totalCount > 0 && checkedCount === totalCount);
+    }
+};
+
+window.confirmBatchDeleteResources = async () => {
+    const checked = document.querySelectorAll('.res-batch-checkbox:checked');
+    if (checked.length === 0) return;
+    const ids = Array.from(checked).map(chk => chk.value);
+    
+    const confirmed = await showAppModal({ 
+        title: 'Batch Delete Resources', 
+        text: `Are you sure you want to permanently delete these ${ids.length} resources? This cannot be undone.`, 
+        type: 'danger', 
+        confirmText: 'Delete All' 
+    });
+    
+    if (confirmed) {
+        fetch('api/resources.php?action=batch_delete', { 
+            method: 'POST', 
+            body: JSON.stringify({ ids }), 
+            headers: {'Content-Type': 'application/json'} 
+        }).then(res => res.json()).then(data => {
+            if(data.success) {
+                loadResources();
+            } else {
+                showAppModal({ title: 'Error', text: data.message || 'Failed to delete resources', type: 'danger', confirmText: 'Okay' });
+            }
+        });
+    }
+};
+
 });
 

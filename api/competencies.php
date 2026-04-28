@@ -35,6 +35,12 @@ try {
     die(json_encode(['success' => false, 'message' => 'Database connection failed: ' . $e->getMessage()]));
 }
 
+// Auto-migration for new schema
+try { $pdo->exec("ALTER TABLE learning_competencies ADD COLUMN key_stage VARCHAR(50)"); } catch (Exception $e) {}
+try { $pdo->exec("ALTER TABLE learning_competencies ADD COLUMN quarter VARCHAR(50)"); } catch (Exception $e) {}
+try { $pdo->exec("ALTER TABLE learning_competencies ADD COLUMN term VARCHAR(50)"); } catch (Exception $e) {}
+try { $pdo->exec("ALTER TABLE learning_competencies DROP COLUMN quarter_term"); } catch (Exception $e) {}
+
 $action = $_GET['action'] ?? '';
 
 if ($action === 'list') {
@@ -46,9 +52,11 @@ if ($action === 'list') {
     $grade = $_GET['grade'] ?? '';
     $subject = $_GET['subject'] ?? '';
     $quarter = $_GET['quarter'] ?? '';
+    $term = $_GET['term'] ?? '';
     $week = $_GET['week'] ?? '';
     $curriculum = $_GET['curriculum'] ?? '';
     $school_level = $_GET['school_level'] ?? '';
+    $key_stage = $_GET['key_stage'] ?? '';
 
     try {
         $params = [];
@@ -61,10 +69,12 @@ if ($action === 'list') {
         }
         if (!empty($grade)) { $query .= " AND grade_level = ?"; $params[] = $grade; }
         if (!empty($subject)) { $query .= " AND subject = ?"; $params[] = $subject; }
-        if (!empty($quarter)) { $query .= " AND quarter_term = ?"; $params[] = $quarter; }
+        if (!empty($quarter)) { $query .= " AND quarter = ?"; $params[] = $quarter; }
+        if (!empty($term)) { $query .= " AND term = ?"; $params[] = $term; }
         if (!empty($week)) { $query .= " AND week = ?"; $params[] = $week; }
         if (!empty($curriculum)) { $query .= " AND curriculum = ?"; $params[] = $curriculum; }
         if (!empty($school_level)) { $query .= " AND school_level = ?"; $params[] = $school_level; }
+        if (!empty($key_stage)) { $query .= " AND key_stage = ?"; $params[] = $key_stage; }
 
         $countQuery = str_replace("SELECT *", "SELECT COUNT(*) as total", $query);
         $countStmt = $pdo->prepare($countQuery);
@@ -118,9 +128,11 @@ if ($action === 'unique_values') {
     $subject = $_GET['subject'] ?? '';
     $grade = $_GET['grade'] ?? '';
     $quarter = $_GET['quarter'] ?? '';
+    $term = $_GET['term'] ?? '';
     $week = $_GET['week'] ?? '';
     $school_level = $_GET['school_level'] ?? '';
     $curriculum = $_GET['curriculum'] ?? '';
+    $key_stage = $_GET['key_stage'] ?? '';
 
     try {
         $where = ["1=1"];
@@ -128,62 +140,68 @@ if ($action === 'unique_values') {
 
         if (!empty($subject)) { $where[] = "subject = ?"; $params[] = $subject; }
         if (!empty($grade)) { $where[] = "grade_level = ?"; $params[] = $grade; }
-        if (!empty($quarter)) { $where[] = "quarter_term = ?"; $params[] = $quarter; }
+        if (!empty($quarter)) { $where[] = "quarter = ?"; $params[] = $quarter; }
+        if (!empty($term)) { $where[] = "term = ?"; $params[] = $term; }
         if (!empty($week)) { $where[] = "week = ?"; $params[] = $week; }
         if (!empty($school_level)) { $where[] = "school_level = ?"; $params[] = $school_level; }
         if (!empty($curriculum)) { $where[] = "curriculum = ?"; $params[] = $curriculum; }
+        if (!empty($key_stage)) { $where[] = "key_stage = ?"; $params[] = $key_stage; }
 
         $whereClause = implode(" AND ", $where);
 
         $getDistinct = function($col) use ($pdo, $whereClause, $params) {
-            $stmt = $pdo->prepare("SELECT DISTINCT `$col` FROM learning_competencies WHERE $whereClause AND `$col` IS NOT NULL AND `$col` != '' ORDER BY `$col` ASC");
+            $stmt = $pdo->prepare("SELECT DISTINCT `$col` FROM learning_competencies WHERE $whereClause AND `$col` IS NOT NULL AND `$col` != '' AND `$col` != '#N/A' AND `$col` != 'N/A' AND TRIM(`$col`) != '' ORDER BY `$col` ASC");
             $stmt->execute($params);
-            return $stmt->fetchAll(PDO::FETCH_COLUMN);
+            $results = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+            if ($col === 'week' || $col === 'quarter' || $col === 'term' || $col === 'grade_level' || $col === 'key_stage') {
+                usort($results, function($a, $b) {
+                    $numA = (int) preg_replace('/\D/', '', $a);
+                    $numB = (int) preg_replace('/\D/', '', $b);
+                    if ($numA == 0 && $numB == 0) return strcmp($a, $b);
+                    if ($numA == $numB) return strcmp($a, $b);
+                    return $numA - $numB;
+                });
+            }
+            return $results;
         };
 
-        // Fetch competencies:
-        // - When week is set: try exact week match first; if no results (week stored as NULL/empty in DB), fall back to quarter-level
-        // - When quarter is set but no week: show quarter-level MELCs
+        // Fetch competencies
         $competencies = [];
-        if (!empty($subject) && !empty($grade) && !empty($quarter)) {
-            if (!empty($week)) {
-                // Try week-specific first
-                $weekWhere = $whereClause;
-                $weekParams = $params;
-                $weekStmt = $pdo->prepare("SELECT id, melc, content_std, performance_std, code FROM learning_competencies WHERE $weekWhere ORDER BY melc ASC");
-                $weekStmt->execute($weekParams);
-                $competencies = $weekStmt->fetchAll();
+        if (!empty($subject) && !empty($grade) && (!empty($quarter) || !empty($term))) {
+            // First try with the exact filters (which might include week)
+            $stmt = $pdo->prepare("SELECT id, melc, content_std, performance_std, code, week FROM learning_competencies WHERE $whereClause ORDER BY melc ASC");
+            $stmt->execute($params);
+            $competencies = $stmt->fetchAll();
 
-                // If no results with week filter, the week column may be empty/NULL for these rows — fall back to quarter-level
-                if (empty($competencies)) {
-                    // Build a quarter-only filter (drop week from where clause)
-                    $fallbackWhere = ["1=1"];
-                    $fallbackParams = [];
-                    if (!empty($subject))      { $fallbackWhere[] = "subject = ?";      $fallbackParams[] = $subject; }
-                    if (!empty($grade))        { $fallbackWhere[] = "grade_level = ?";  $fallbackParams[] = $grade; }
-                    if (!empty($quarter))      { $fallbackWhere[] = "quarter_term = ?"; $fallbackParams[] = $quarter; }
-                    if (!empty($school_level)) { $fallbackWhere[] = "school_level = ?"; $fallbackParams[] = $school_level; }
-                    if (!empty($curriculum))   { $fallbackWhere[] = "curriculum = ?";   $fallbackParams[] = $curriculum; }
-                    $fallbackClause = implode(" AND ", $fallbackWhere);
-                    $fbStmt = $pdo->prepare("SELECT id, melc, content_std, performance_std, code FROM learning_competencies WHERE $fallbackClause ORDER BY melc ASC");
-                    $fbStmt->execute($fallbackParams);
-                    $competencies = $fbStmt->fetchAll();
-                }
-            } else {
-                // No week selected — show quarter-level MELCs
-                $stmt = $pdo->prepare("SELECT id, melc, content_std, performance_std, code FROM learning_competencies WHERE $whereClause ORDER BY melc ASC");
-                $stmt->execute($params);
-                $competencies = $stmt->fetchAll();
+            // If a week was requested but returned no results, fallback to returning ALL competencies for that quarter/term
+            if (empty($competencies) && !empty($week)) {
+                $fallbackWhere = ["1=1"];
+                $fallbackParams = [];
+                if (!empty($subject))      { $fallbackWhere[] = "subject = ?";      $fallbackParams[] = $subject; }
+                if (!empty($grade))        { $fallbackWhere[] = "grade_level = ?";  $fallbackParams[] = $grade; }
+                if (!empty($quarter))      { $fallbackWhere[] = "quarter = ?";      $fallbackParams[] = $quarter; }
+                if (!empty($term))         { $fallbackWhere[] = "term = ?";         $fallbackParams[] = $term; }
+                if (!empty($school_level)) { $fallbackWhere[] = "school_level = ?"; $fallbackParams[] = $school_level; }
+                if (!empty($curriculum))   { $fallbackWhere[] = "curriculum = ?";   $fallbackParams[] = $curriculum; }
+                if (!empty($key_stage))    { $fallbackWhere[] = "key_stage = ?";    $fallbackParams[] = $key_stage; }
+                
+                $fallbackClause = implode(" AND ", $fallbackWhere);
+                $fbStmt = $pdo->prepare("SELECT id, melc, content_std, performance_std, code, week FROM learning_competencies WHERE $fallbackClause ORDER BY melc ASC");
+                $fbStmt->execute($fallbackParams);
+                $competencies = $fbStmt->fetchAll();
             }
         }
 
         echo json_encode(['success' => true, 'data' => [
             'subjects' => $getDistinct('subject'),
             'grades' => $getDistinct('grade_level'),
-            'quarters' => $getDistinct('quarter_term'),
+            'quarters' => $getDistinct('quarter'),
+            'terms' => $getDistinct('term'),
             'weeks' => $getDistinct('week'),
             'school_levels' => $getDistinct('school_level'),
             'curriculums' => $getDistinct('curriculum'),
+            'key_stages' => $getDistinct('key_stage'),
             'competencies' => $competencies
         ]]);
         exit;
@@ -205,21 +223,23 @@ if ($action === 'import') {
         
         $pdo->beginTransaction();
         $stmt = $pdo->prepare("INSERT INTO learning_competencies 
-            (curriculum, school_level, grade_level, subject, quarter_term, week, melc, content_std, performance_std, code) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            (curriculum, school_level, key_stage, grade_level, subject, quarter, term, content_std, performance_std, melc, week, code) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
 
         while (($row = fgetcsv($handle)) !== FALSE) {
             $stmt->execute([
                 $row[0] ?? null, // curriculum
                 $row[1] ?? null, // school_level
-                $row[2] ?? null, // grade_level
-                $row[3] ?? null, // subject
-                $row[4] ?? null, // quarter_term
-                $row[8] ?? null, // week
-                $row[7] ?? null, // melc
-                $row[5] ?? null, // content_std
-                $row[6] ?? null, // performance_std
-                $row[9] ?? null  // code
+                $row[2] ?? null, // key_stage
+                $row[3] ?? null, // grade_level
+                $row[4] ?? null, // subject
+                $row[5] ?? null, // quarter
+                $row[6] ?? null, // term
+                $row[7] ?? null, // content_std
+                $row[8] ?? null, // performance_std
+                $row[9] ?? null, // melc
+                $row[10] ?? null, // week
+                $row[11] ?? null  // code
             ]);
         }
         
@@ -248,17 +268,17 @@ if ($action === 'add' || $action === 'edit') {
     $data = json_decode($input, true) ?: $_POST;
     
     $id = (int)($data['id'] ?? 0);
-    $fields = ['curriculum', 'school_level', 'grade_level', 'subject', 'quarter_term', 'content_std', 'performance_std', 'melc', 'week', 'code'];
+    $fields = ['curriculum', 'school_level', 'key_stage', 'grade_level', 'subject', 'quarter', 'term', 'content_std', 'performance_std', 'melc', 'week', 'code'];
     $vals = [];
     foreach ($fields as $f) $vals[] = $data[$f] ?? null;
 
     try {
         if ($action === 'edit' && $id > 0) {
             $vals[] = $id;
-            $pdo->prepare("UPDATE learning_competencies SET curriculum=?, school_level=?, grade_level=?, subject=?, quarter_term=?, content_std=?, performance_std=?, melc=?, week=?, code=? WHERE id=?")->execute($vals);
+            $pdo->prepare("UPDATE learning_competencies SET curriculum=?, school_level=?, key_stage=?, grade_level=?, subject=?, quarter=?, term=?, content_std=?, performance_std=?, melc=?, week=?, code=? WHERE id=?")->execute($vals);
             echo json_encode(['success' => true, 'message' => 'Competency updated']);
         } else {
-            $pdo->prepare("INSERT INTO learning_competencies (curriculum, school_level, grade_level, subject, quarter_term, content_std, performance_std, melc, week, code) VALUES (?,?,?,?,?,?,?,?,?,?)")->execute($vals);
+            $pdo->prepare("INSERT INTO learning_competencies (curriculum, school_level, key_stage, grade_level, subject, quarter, term, content_std, performance_std, melc, week, code) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")->execute($vals);
             echo json_encode(['success' => true, 'message' => 'Competency added']);
         }
     } catch (Exception $e) {
@@ -280,3 +300,4 @@ if ($action === 'delete') {
 }
 
 echo json_encode(['success' => false, 'message' => 'Invalid action']);
+

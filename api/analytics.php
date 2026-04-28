@@ -56,7 +56,7 @@ function buildPeriodDataset(PDO $pdo, string $table, string $column, string $per
             }
             $sql = "SELECT DAYNAME($column) as label, COUNT(*) as total
                     FROM $table
-                    WHERE $column >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
+                    WHERE YEARWEEK($column, 0) = YEARWEEK(CURDATE(), 0)
                     GROUP BY label";
             break;
 
@@ -94,11 +94,19 @@ function buildPeriodDataset(PDO $pdo, string $table, string $column, string $per
     }
 
     while ($row = $stmt->fetch()) {
-        $h_int = (int)$row['hour_val'];
-        $h_disp = $h_int % 12;
-        if($h_disp == 0) $h_disp = 12;
-        $h_ampm = $h_int < 12 ? 'AM' : 'PM';
-        $dataset["$h_disp $h_ampm"] = (int)$row['total'];
+        if ($period === 'day') {
+            $h_int = (int)$row['hour_val'];
+            $h_disp = $h_int % 12;
+            if($h_disp == 0) $h_disp = 12;
+            $h_ampm = $h_int < 12 ? 'AM' : 'PM';
+            $dataset["$h_disp $h_ampm"] = (int)$row['total'];
+        } else {
+            // For week, month, year labels
+            $label = $row['label'];
+            if (isset($dataset[$label])) {
+                $dataset[$label] = (int)$row['total'];
+            }
+        }
     }
 
     $result = [];
@@ -129,7 +137,7 @@ switch ($period) {
         if ($target_date) $downloadCategoryParams['target_date'] = $target_date;
         break;
     case 'week':
-        $downloadCategoryWhere = "WHERE d.$downloadTsCol >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)";
+        $downloadCategoryWhere = "WHERE YEARWEEK(d.$downloadTsCol, 0) = YEARWEEK(CURDATE(), 0)";
         break;
     case 'month':
         $downloadCategoryWhere = "WHERE MONTH(d.$downloadTsCol) = MONTH(CURDATE()) AND YEAR(d.$downloadTsCol) = YEAR(CURDATE())";

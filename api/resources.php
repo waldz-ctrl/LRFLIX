@@ -60,31 +60,48 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             exit;
         }
 
-        $resourceId = $_GET['id'] ?? 0;
-        $stmt = $pdo->prepare("SELECT competencies FROM resources WHERE id = ?");
+        $resourceId = (int)($_GET['id'] ?? 0);
+        $stmt = $pdo->prepare("SELECT competencies, grade_level, learning_area FROM resources WHERE id = ?");
         $stmt->execute([$resourceId]);
         $current = $stmt->fetch();
 
         $related = [];
-        if ($current && !empty($current['competencies'])) {
-            $compList = array_map('trim', explode(',', $current['competencies']));
+        if ($current) {
+            $conditions = [];
+            $params = [];
+            
+            // 1. Same competencies
+            $compList = array_filter(array_map('trim', explode(',', $current['competencies'] ?? '')));
             if (!empty($compList)) {
-                $conditions = [];
-                $params = [];
+                $compConds = [];
                 foreach ($compList as $comp) {
-                    $conditions[] = "FIND_IN_SET(?, competencies)";
+                    $compConds[] = "FIND_IN_SET(?, competencies)";
                     $params[] = $comp;
+                }
+                $conditions[] = "(" . implode(' OR ', $compConds) . ")";
+            }
+            
+            // 2. Same grade level & subject
+            $grade = $current['grade_level'] ?? '';
+            $subject = $current['learning_area'] ?? '';
+            if (!empty($grade) && !empty($subject)) {
+                $conditions[] = "(grade_level = ? AND learning_area = ?)";
+                $params[] = $grade;
+                $params[] = $subject;
+            }
+
+            if (!empty($conditions)) {
+                $finalParams = [$_SESSION['user_id'], $resourceId];
+                foreach($params as $p) {
+                    $finalParams[] = $p;
                 }
 
                 $sql = "SELECT r.*, 
                         (SELECT COUNT(*) FROM likes l WHERE l.resource_id = r.id AND l.user_id = ?) as user_liked 
-                        FROM resources r WHERE id != ? AND (" . implode(' OR ', $conditions) . ") LIMIT 5";
-
-                array_unshift($params, $_SESSION['user_id']); // for user_liked count
-                $params[] = $resourceId;
+                        FROM resources r WHERE id != ? AND (" . implode(' OR ', $conditions) . ") ORDER BY created_at DESC LIMIT 10";
 
                 $stmt = $pdo->prepare($sql);
-                $stmt->execute($params);
+                $stmt->execute($finalParams);
                 $related = $stmt->fetchAll();
             }
         }
@@ -200,8 +217,9 @@ elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $authors = $_POST['authors'] ?? '';
         $language = $_POST['language'] ?? '';
         $grade_level = $_POST['grade_level'] ?? '';
-        $quarter = (int)$_POST['quarter'] ?? null;
-        $week = (int)$_POST['week'] ?? null;
+        $quarter = $_POST['quarter'] ?? null;
+        $term = $_POST['term'] ?? null;
+        $week = $_POST['week'] ?? null;
         $content_standards = $_POST['content_standards'] ?? '';
         $performance_standards = $_POST['performance_standards'] ?? '';
         $competencies = $_POST['competencies'] ?? '';
@@ -212,6 +230,7 @@ elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $curriculum = $_POST['curriculum'] ?? '';
         $school_level = $_POST['school_level'] ?? '';
+        $key_stage = $_POST['key_stage'] ?? '';
         $camp_type = $_POST['camp_type'] ?? '';
         $material_type = $_POST['material_type'] ?? '';
         $component = $_POST['component'] ?? '';
@@ -246,8 +265,8 @@ elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             move_uploaded_file($_FILES['file']['tmp_name'], $filePath);
 
-            $stmt = $pdo->prepare("INSERT INTO resources (category, title, authors, language, grade_level, quarter, week, content_standards, performance_standards, competencies, description, learning_area, resource_type, year_published, curriculum, school_level, camp_type, material_type, component, module_no, code, file_path, file_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-            $stmt->execute([$category, $title, $authors, $language, $grade_level, $quarter, $week, $content_standards, $performance_standards, $competencies, $description, $learning_area, $resource_type, $year_published, $curriculum, $school_level, $camp_type, $material_type, $component, $module_no, $code, $dbFilePath, $fileHash]);
+            $stmt = $pdo->prepare("INSERT INTO resources (category, title, authors, language, grade_level, quarter, term, week, content_standards, performance_standards, competencies, description, learning_area, resource_type, year_published, curriculum, school_level, key_stage, camp_type, material_type, component, module_no, code, file_path, file_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt->execute([$category, $title, $authors, $language, $grade_level, $quarter, $term, $week, $content_standards, $performance_standards, $competencies, $description, $learning_area, $resource_type, $year_published, $curriculum, $school_level, $key_stage, $camp_type, $material_type, $component, $module_no, $code, $dbFilePath, $fileHash]);
             echo json_encode(['success' => true, 'message' => 'Upload successful']);
         }
         else {
@@ -267,8 +286,9 @@ elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $authors = $_POST['authors'] ?? '';
         $language = $_POST['language'] ?? '';
         $grade_level = $_POST['grade_level'] ?? '';
-        $quarter = (int)$_POST['quarter'] ?? null;
-        $week = (int)$_POST['week'] ?? null;
+        $quarter = $_POST['quarter'] ?? null;
+        $term = $_POST['term'] ?? null;
+        $week = $_POST['week'] ?? null;
         $content_standards = $_POST['content_standards'] ?? '';
         $performance_standards = $_POST['performance_standards'] ?? '';
         $competencies = $_POST['competencies'] ?? '';
@@ -279,14 +299,15 @@ elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $curriculum = $_POST['curriculum'] ?? '';
         $school_level = $_POST['school_level'] ?? '';
+        $key_stage = $_POST['key_stage'] ?? '';
         $camp_type = $_POST['camp_type'] ?? '';
         $material_type = $_POST['material_type'] ?? '';
         $component = $_POST['component'] ?? '';
         $module_no = $_POST['module_no'] ?? '';
         $code = $_POST['code'] ?? '';
 
-        $sql = "UPDATE resources SET category=?, title=?, authors=?, language=?, grade_level=?, quarter=?, week=?, content_standards=?, performance_standards=?, competencies=?, description=?, learning_area=?, resource_type=?, year_published=?, curriculum=?, school_level=?, camp_type=?, material_type=?, component=?, module_no=?, code=? WHERE id=?";
-        $params = [$category, $title, $authors, $language, $grade_level, $quarter, $week, $content_standards, $performance_standards, $competencies, $description, $learning_area, $resource_type, $year_published, $curriculum, $school_level, $camp_type, $material_type, $component, $module_no, $code, $id];
+        $sql = "UPDATE resources SET category=?, title=?, authors=?, language=?, grade_level=?, quarter=?, term=?, week=?, content_standards=?, performance_standards=?, competencies=?, description=?, learning_area=?, resource_type=?, year_published=?, curriculum=?, school_level=?, key_stage=?, camp_type=?, material_type=?, component=?, module_no=?, code=? WHERE id=?";
+        $params = [$category, $title, $authors, $language, $grade_level, $quarter, $term, $week, $content_standards, $performance_standards, $competencies, $description, $learning_area, $resource_type, $year_published, $curriculum, $school_level, $key_stage, $camp_type, $material_type, $component, $module_no, $code, $id];
 
         if (isset($_FILES['file']) && $_FILES['file']['size'] > 0) {
             $uploadDir = '../uploads/';
@@ -307,8 +328,8 @@ elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 @unlink('../' . $oldRes['file_path']);
             }
 
-            $sql = "UPDATE resources SET category=?, title=?, authors=?, language=?, grade_level=?, quarter=?, week=?, content_standards=?, performance_standards=?, competencies=?, description=?, learning_area=?, resource_type=?, year_published=?, curriculum=?, school_level=?, camp_type=?, material_type=?, component=?, module_no=?, code=?, file_path=? WHERE id=?";
-            $params = [$category, $title, $authors, $language, $grade_level, $quarter, $week, $content_standards, $performance_standards, $competencies, $description, $learning_area, $resource_type, $year_published, $curriculum, $school_level, $camp_type, $material_type, $component, $module_no, $code, $dbFilePath, $id];
+            $sql = "UPDATE resources SET category=?, title=?, authors=?, language=?, grade_level=?, quarter=?, term=?, week=?, content_standards=?, performance_standards=?, competencies=?, description=?, learning_area=?, resource_type=?, year_published=?, curriculum=?, school_level=?, key_stage=?, camp_type=?, material_type=?, component=?, module_no=?, code=?, file_path=? WHERE id=?";
+            $params = [$category, $title, $authors, $language, $grade_level, $quarter, $term, $week, $content_standards, $performance_standards, $competencies, $description, $learning_area, $resource_type, $year_published, $curriculum, $school_level, $key_stage, $camp_type, $material_type, $component, $module_no, $code, $dbFilePath, $id];
         }
 
         $stmt = $pdo->prepare($sql);
@@ -339,6 +360,36 @@ elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
             echo json_encode(['success' => false, 'message' => 'Not found']);
         }
 
+    }
+    elseif ($action === 'batch_delete') {
+        if (!isAdmin()) {
+            echo json_encode(['success' => false, 'message' => 'Admin only']);
+            exit;
+        }
+
+        $data = json_decode(file_get_contents("php://input"), true);
+        $ids = $data['ids'] ?? [];
+
+        if (empty($ids) || !is_array($ids)) {
+            echo json_encode(['success' => false, 'message' => 'No resources selected']);
+            exit;
+        }
+
+        $placeholders = str_repeat('?,', count($ids) - 1) . '?';
+        $stmt = $pdo->prepare("SELECT file_path FROM resources WHERE id IN ($placeholders)");
+        $stmt->execute($ids);
+        $files = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+        foreach ($files as $file) {
+            if (!empty($file)) {
+                @unlink('../' . $file);
+            }
+        }
+
+        $stmt = $pdo->prepare("DELETE FROM resources WHERE id IN ($placeholders)");
+        $stmt->execute($ids);
+
+        echo json_encode(['success' => true, 'message' => count($ids) . ' resources deleted']);
     }
     elseif ($action === 'like') {
         if (!isLoggedIn()) {
@@ -505,6 +556,105 @@ elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $fileUrl = $protocol . '://' . $host . rtrim($scriptDir, '/') . '/' . $fp;
 
         echo json_encode(['success' => true, 'file' => $fileUrl]);
+    }
+    elseif ($action === 'package_download') {
+
+        if (!isLoggedIn()) {
+            echo json_encode(['success' => false, 'message' => 'Unauthorized']);
+            exit;
+        }
+
+        // Ensure package_id column exists (one-time migration)
+        try {
+            $pdo->exec("ALTER TABLE downloads ADD COLUMN IF NOT EXISTS package_id VARCHAR(36) NULL DEFAULT NULL");
+        } catch (Exception $e) { /* already exists */ }
+
+        $data    = json_decode(file_get_contents("php://input"), true);
+        $userId  = $_SESSION['user_id'];
+        $CAP     = 30;
+
+        // Generate UUID for this package event
+        $packageId = sprintf(
+            '%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
+            mt_rand(0,0xffff), mt_rand(0,0xffff),
+            mt_rand(0,0xffff),
+            mt_rand(0,0x0fff)|0x4000,
+            mt_rand(0,0x3fff)|0x8000,
+            mt_rand(0,0xffff), mt_rand(0,0xffff), mt_rand(0,0xffff)
+        );
+
+        // Resolve resources from IDs (frontend always sends IDs)
+        $ids = array_map('intval', array_slice($data['ids'] ?? [], 0, $CAP));
+        if (empty($ids)) {
+            echo json_encode(['success' => false, 'message' => 'No resources selected']);
+            exit;
+        }
+
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+        $stmt = $pdo->prepare("SELECT id, title, file_path FROM resources WHERE id IN ($placeholders)");
+        $stmt->execute($ids);
+        $resources = $stmt->fetchAll();
+
+        if (empty($resources)) {
+            echo json_encode(['success' => false, 'message' => 'No matching resources found']);
+            exit;
+        }
+
+        // Log download count per LR (same logic as single download, just looped)
+        $dlStmt    = $pdo->prepare("INSERT INTO downloads (user_id, resource_id, package_id) VALUES (?, ?, ?)");
+        $countStmt = $pdo->prepare("UPDATE resources SET downloads_count = downloads_count + 1 WHERE id = ?");
+        foreach ($resources as $res) {
+            $dlStmt->execute([$userId, $res['id'], $packageId]);
+            $countStmt->execute([$res['id']]);
+        }
+
+        // Build ZIP
+        set_time_limit(300);
+        if (!class_exists('ZipArchive')) {
+            echo json_encode(['success' => false, 'message' => 'ZIP extension not available on this server']);
+            exit;
+        }
+
+        $zip    = new ZipArchive();
+        $tmpZip = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'lrflix_pkg_' . $packageId . '.zip';
+
+        if ($zip->open($tmpZip, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+            echo json_encode(['success' => false, 'message' => 'Could not create ZIP package']);
+            exit;
+        }
+
+        $baseDir = dirname(__DIR__) . DIRECTORY_SEPARATOR;
+        foreach ($resources as $res) {
+            $filePath = $baseDir . str_replace('/', DIRECTORY_SEPARATOR, $res['file_path']);
+            if (file_exists($filePath)) {
+                $safe = preg_replace('/[^a-zA-Z0-9_\-]/', '_', $res['title']);
+                $safe = preg_replace('/_+/', '_', $safe);
+                $zip->addFile($filePath, $safe . '.pdf');
+            }
+        }
+        $zip->close();
+
+        // Build auto filename from hints passed by frontend
+        $hints  = $data['filename_hints'] ?? [];
+        $parts  = [];
+        foreach (['category','grade_level','learning_area','resource_type','quarter'] as $key) {
+            if (!empty($hints[$key])) {
+                $parts[] = preg_replace('/[^a-zA-Z0-9]/', '_', $hints[$key]);
+            }
+        }
+        if (empty($parts)) $parts[] = 'LRFLIX_Package';
+        $parts[]     = date('Ymd');
+        $zipFilename = preg_replace('/_+/', '_', implode('_', $parts)) . '.zip';
+
+        // Stream ZIP to browser (overrides the application/json header set at top)
+        header('Content-Type: application/zip');
+        header('Content-Disposition: attachment; filename="' . $zipFilename . '"');
+        header('Content-Length: ' . filesize($tmpZip));
+        header('Pragma: no-cache');
+        header('Cache-Control: no-store, no-cache, must-revalidate');
+        readfile($tmpZip);
+        @unlink($tmpZip);
+        exit;
     }
 }
 ?>

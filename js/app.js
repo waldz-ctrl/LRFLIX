@@ -3,6 +3,11 @@ document.addEventListener('DOMContentLoaded', () => {
     let isRegistering = false;
     let currentResource = null;
 
+    // ── Package Download State ─────────────
+    window.pkgSelectMode = false;
+    window.selectedLRIds = new Set();
+    window.currentDisplayedItems = [];
+
     fetch('api/analytics.php?action=track_visit', {
         method: 'POST'
     }).catch(() => {});
@@ -449,14 +454,22 @@ document.addEventListener('DOMContentLoaded', () => {
     function filterSearch(term) {
         document.getElementById('hero-section').style.display = 'none';
         document.getElementById('dynamic-categories-container').style.display = 'none';
+        // Hide pkg toolbar during global search
+        const pkgToolbar = document.getElementById('pkg-download-toolbar');
+        if (pkgToolbar) pkgToolbar.style.display = 'none';
 
         const fullView = document.getElementById('category-full-view');
         fullView.classList.remove('hidden');
         fullView.style.paddingTop = '100px';
         document.getElementById('category-full-title').innerText = `Search results for: "${term}"`;
 
+        // Hide category filters during search
+        const catFilters = document.getElementById('category-filters');
+        if (catFilters) catFilters.style.display = 'none';
+
         const grid = document.getElementById('category-full-grid');
         grid.innerHTML = '';
+        grid.className = 'search-results-grid'; // Apply the new grid class
 
         const filtered = globalResources.filter(r =>
             (r.title && r.title.toLowerCase().includes(term)) ||
@@ -475,18 +488,18 @@ document.addEventListener('DOMContentLoaded', () => {
         items.forEach(res => {
             const card = document.createElement('div');
             card.className = 'poster-card';
-            card.style.cssText = 'width:200px; cursor:pointer; position:relative; border-radius:6px; overflow:hidden; background:#222; transition:transform 0.3s;';
+            card.style.cssText = 'width:100%; max-width:200px; cursor:pointer; position:relative; border-radius:6px; overflow:hidden; background:#222; transition:transform 0.3s; box-shadow: 0 4px 15px rgba(0,0,0,0.5);';
             card.addEventListener('mouseenter', () => card.style.transform = 'scale(1.05)');
             card.addEventListener('mouseleave', () => card.style.transform = 'scale(1)');
             card.addEventListener('click', () => openModal(res));
 
             const canvas = document.createElement('canvas');
             canvas.className = 'poster';
-            canvas.style.cssText = 'width:100%; height:280px; background:#222; display:block; margin:0;';
+            canvas.style.cssText = 'width:100%; height:280px; background:#222; display:block; margin:0; object-fit: cover;';
             canvas.title = res.title;
 
             const label = document.createElement('div');
-            label.style.cssText = 'padding:8px; font-size:0.8rem; color:#ddd; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;';
+            label.style.cssText = 'padding:10px; font-size:0.85rem; font-weight:600; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; background: rgba(0,0,0,0.7);';
             label.textContent = res.title;
 
             card.appendChild(canvas);
@@ -754,23 +767,118 @@ document.addEventListener('DOMContentLoaded', () => {
                     globalResources = data.resources;
 
                     if (globalResources.length > 0) {
-                        const latest = globalResources[0];
-                        document.getElementById('hero-title').innerText = latest.title || 'Untitled';
+                        const featured = globalResources.slice(0, Math.min(5, globalResources.length));
+                        let currentIdx = 0;
+                        const heroContent = document.querySelector('.hero-content');
+
+                        const updateDots = () => {
+                            const dotsEl = document.getElementById('hero-dots');
+                            if (!dotsEl) return;
+                            dotsEl.querySelectorAll('.hero-dot').forEach((d, i) => {
+                                d.style.background = i === currentIdx ? '#e50914' : 'rgba(255,255,255,0.35)';
+                                d.style.width = i === currentIdx ? '22px' : '8px';
+                            });
+                        };
+
+                        const updateHero = (animate = true) => {
+                            const applyContent = () => {
+                                const latest = featured[currentIdx];
+                                document.getElementById('hero-title').innerText = latest.title || 'Untitled';
+                                
+                                let displayDesc = latest.description || 'No description provided.';
+                                const meta = [];
+                                if(latest.category) meta.push(latest.category);
+                                if(latest.resource_type) meta.push(latest.resource_type);
+                                if(latest.grade_level) meta.push(`Grade: ${latest.grade_level}`);
+                                if(latest.learning_area) meta.push(latest.learning_area);
+                                
+                                const metaText = meta.length > 0 ? meta.join(' • ') + "\n" : "";
+                                document.getElementById('hero-desc').innerText = metaText + displayDesc;
+                                
+                                const heroViewBtn = document.getElementById('hero-view-btn');
+                                const newHeroBtn = heroViewBtn.cloneNode(true);
+                                heroViewBtn.parentNode.replaceChild(newHeroBtn, heroViewBtn);
+                                newHeroBtn.addEventListener('click', () => openModal(latest));
+                                updateDots();
+                                if (animate) {
+                                    heroContent.style.opacity = '1';
+                                    heroContent.style.transition = 'opacity 0.4s ease';
+                                }
+                            };
+                            
+                            if (animate) {
+                                heroContent.style.transition = 'opacity 0.3s ease';
+                                heroContent.style.opacity = '0';
+                                setTimeout(applyContent, 300);
+                            } else {
+                                applyContent();
+                            }
+                        };
                         
-                        let displayDesc = latest.description || 'No description provided.';
-                        const meta = [];
-                        if(latest.category) meta.push(latest.category);
-                        if(latest.resource_type) meta.push(latest.resource_type);
-                        if(latest.grade_level) meta.push(`Grade: ${latest.grade_level}`);
-                        if(latest.learning_area) meta.push(latest.learning_area);
-                        
-                        const metaText = meta.length > 0 ? meta.join(' • ') + "\n" : "";
-                        document.getElementById('hero-desc').innerText = metaText + displayDesc;
-                        
-                        const heroViewBtn = document.getElementById('hero-view-btn');
-                        const newHeroBtn = heroViewBtn.cloneNode(true);
-                        heroViewBtn.parentNode.replaceChild(newHeroBtn, heroViewBtn);
-                        newHeroBtn.addEventListener('click', () => openModal(latest));
+                        updateHero(false);
+
+                        // Carousel controls
+                        if (!document.getElementById('hero-carousel-controls') && featured.length > 1) {
+                            const controls = document.createElement('div');
+                            controls.id = 'hero-carousel-controls';
+                            controls.style.cssText = 'display:flex; gap:12px; margin-top:22px; align-items:center;';
+                            
+                            const prevBtn = document.createElement('button');
+                            prevBtn.id = 'hero-prev';
+                            prevBtn.innerHTML = '<i class="fas fa-chevron-left"></i>';
+                            prevBtn.style.cssText = 'background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2); color:white; width:38px; height:38px; border-radius:50%; cursor:pointer; transition:background 0.3s; display:flex; align-items:center; justify-content:center; flex-shrink:0;';
+                            
+                            const dotsContainer = document.createElement('div');
+                            dotsContainer.id = 'hero-dots';
+                            dotsContainer.style.cssText = 'display:flex; gap:6px; align-items:center;';
+                            featured.forEach((_, i) => {
+                                const dot = document.createElement('span');
+                                dot.className = 'hero-dot';
+                                dot.style.cssText = `display:inline-block; height:8px; border-radius:4px; cursor:pointer; transition:width 0.3s ease, background 0.3s ease; background:${i===0?'#e50914':'rgba(255,255,255,0.35)'}; width:${i===0?'22px':'8px'};`;
+                                dot.addEventListener('click', () => {
+                                    currentIdx = i;
+                                    updateHero();
+                                    resetTimer();
+                                });
+                                dotsContainer.appendChild(dot);
+                            });
+
+                            const nextBtn = document.createElement('button');
+                            nextBtn.id = 'hero-next';
+                            nextBtn.innerHTML = '<i class="fas fa-chevron-right"></i>';
+                            nextBtn.style.cssText = 'background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2); color:white; width:38px; height:38px; border-radius:50%; cursor:pointer; transition:background 0.3s; display:flex; align-items:center; justify-content:center; flex-shrink:0;';
+
+                            controls.appendChild(prevBtn);
+                            controls.appendChild(dotsContainer);
+                            controls.appendChild(nextBtn);
+                            heroContent.appendChild(controls);
+                            
+                            const resetTimer = () => {
+                                clearInterval(window.heroTimer);
+                                window.heroTimer = setInterval(() => {
+                                    currentIdx = (currentIdx + 1) % featured.length;
+                                    updateHero();
+                                }, 6000);
+                            };
+
+                            prevBtn.addEventListener('mouseover', () => prevBtn.style.background = 'rgba(255,255,255,0.25)');
+                            prevBtn.addEventListener('mouseout',  () => prevBtn.style.background = 'rgba(255,255,255,0.1)');
+                            nextBtn.addEventListener('mouseover', () => nextBtn.style.background = 'rgba(255,255,255,0.25)');
+                            nextBtn.addEventListener('mouseout',  () => nextBtn.style.background = 'rgba(255,255,255,0.1)');
+
+                            prevBtn.addEventListener('click', () => {
+                                currentIdx = (currentIdx - 1 + featured.length) % featured.length;
+                                updateHero();
+                                resetTimer();
+                            });
+                            nextBtn.addEventListener('click', () => {
+                                currentIdx = (currentIdx + 1) % featured.length;
+                                updateHero();
+                                resetTimer();
+                            });
+
+                            resetTimer();
+                        }
                     } else {
                         document.getElementById('hero-section').style.display = 'none';
                     }
@@ -781,15 +889,31 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     window.closeCategoryView = () => {
+        // Reset pkg select mode
+        window.pkgSelectMode = false;
+        window.selectedLRIds.clear();
+        window.currentDisplayedItems = [];
+        const pkgToolbar = document.getElementById('pkg-download-toolbar');
+        if (pkgToolbar) pkgToolbar.style.display = 'none';
+        const selBtn = document.getElementById('pkg-select-mode-btn');
+        if (selBtn) { selBtn.className = 'btn btn-secondary'; selBtn.innerHTML = '<i class="fas fa-check-square"></i> Select Mode'; }
+        const selBar = document.getElementById('pkg-selected-bar');
+        if (selBar) selBar.style.display = 'none';
+
         document.getElementById('category-full-view').classList.add('hidden');
         document.getElementById('hero-section').style.display = 'block';
         document.getElementById('dynamic-categories-container').style.display = 'block';
-        document.getElementById('category-search').value = '';
-        
-        // Restore top search
+        if(document.getElementById('category-search')) document.getElementById('category-search').value = '';
+
+        // Restore filters and top search
+        const catFilters = document.getElementById('category-filters');
+        if (catFilters) catFilters.style.display = 'flex';
+        const grid = document.getElementById('category-full-grid');
+        if (grid) grid.className = '';
+
         const searchBox = document.querySelector('.search-container');
         if (searchBox) searchBox.style.setProperty('display', 'block', 'important');
-        
+
         resetCategoryFilters();
     };
 
@@ -798,7 +922,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const el = document.getElementById(id);
             if(el) el.value = '';
         });
-        document.getElementById('category-search').value = '';
+        if(document.getElementById('category-search')) document.getElementById('category-search').value = '';
         if(window.currentCategoryItems) renderCategoryGrid(window.currentCategoryItems);
     };
 
@@ -823,7 +947,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function applyCategoryFilters() {
         if(!window.currentCategoryItems) return;
         
-        const term = document.getElementById('category-search').value.toLowerCase().trim();
+        const term = (document.getElementById('category-search')?.value || '').toLowerCase();
         const lrType = document.getElementById('filter-lr-type').value;
         const schoolLevel = document.getElementById('filter-school-level').value;
         const gradeLevel = document.getElementById('filter-grade-level').value;
@@ -854,17 +978,35 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     window.filterCategory = function (cat) {
+        // Reset pkg select mode on category switch
+        window.pkgSelectMode = false;
+        window.selectedLRIds.clear();
+        window.currentDisplayedItems = [];
+        const selBtn = document.getElementById('pkg-select-mode-btn');
+        if (selBtn) { selBtn.className = 'btn btn-secondary'; selBtn.innerHTML = '<i class="fas fa-check-square"></i> Select Mode'; }
+        const selBar = document.getElementById('pkg-selected-bar');
+        if (selBar) selBar.style.display = 'none';
+        // Show pkg toolbar
+        const pkgToolbar = document.getElementById('pkg-download-toolbar');
+        if (pkgToolbar) pkgToolbar.style.display = 'flex';
+
         document.getElementById('hero-section').style.display = 'none';
         document.getElementById('dynamic-categories-container').style.display = 'none';
 
-        // Hide top search while in category
-        const searchBox = document.querySelector('.search-container');
-        if (searchBox) searchBox.style.setProperty('display', 'none', 'important');
+        // Hide main navbar search — category view has its own search bar
+        const mainSearch = document.querySelector('.search-container');
+        if (mainSearch) mainSearch.style.setProperty('display', 'none', 'important');
 
         const fullView = document.getElementById('category-full-view');
         fullView.classList.remove('hidden');
         fullView.style.paddingTop = '100px';
         document.getElementById('category-full-title').innerText = cat;
+
+        // Ensure filters are visible for category view
+        const catFilters = document.getElementById('category-filters');
+        if (catFilters) catFilters.style.display = 'flex';
+        const grid = document.getElementById('category-full-grid');
+        if (grid) grid.className = ''; 
         
         window.currentCategoryItems = globalResources.filter(r => r.category === cat);
         populateCategoryFilters(window.currentCategoryItems);
@@ -872,6 +1014,16 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     function renderCategoryGrid(items) {
+        // Track displayed items for "Download All"
+        window.currentDisplayedItems = items;
+        const cap = Math.min(items.length, 30);
+        const allLabel = document.getElementById('pkg-all-label');
+        if (allLabel) {
+            allLabel.textContent = items.length > 0
+                ? `Download All (${cap} LR${cap !== 1 ? 's' : ''})`
+                : 'Download All';
+        }
+
         const grid = document.getElementById('category-full-grid');
         grid.innerHTML = '';
 
@@ -977,9 +1129,17 @@ document.addEventListener('DOMContentLoaded', () => {
         items.forEach(res => {
             const card = document.createElement('div');
             card.style.cssText = 'min-width:200px; max-width:200px; margin-right:12px; cursor:pointer; position:relative; border-radius:6px; overflow:hidden; background:#222; transition:transform 0.3s;';
-            card.addEventListener('mouseenter', () => card.style.transform = 'scale(1.05)');
-            card.addEventListener('mouseleave', () => card.style.transform = 'scale(1)');
-            card.addEventListener('click', () => openModal(res));
+            card.addEventListener('mouseenter', () => { if (!window.pkgSelectMode) card.style.transform = 'scale(1.05)'; });
+            card.addEventListener('mouseleave', () => { if (!card.classList.contains('pkg-selected')) card.style.transform = 'scale(1)'; });
+            card.addEventListener('click', () => {
+                if (window.pkgSelectMode) { pkgToggleCard(res, card); }
+                else { openModal(res); }
+            });
+            // Checkmark overlay for select mode
+            const pkgOverlay = document.createElement('div');
+            pkgOverlay.className = 'pkg-check-overlay';
+            pkgOverlay.innerHTML = '<i class="fas fa-check"></i>';
+            card.appendChild(pkgOverlay);
 
             const canvas = document.createElement('canvas');
             canvas.className = 'poster';
@@ -1019,6 +1179,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnDownload = document.getElementById('btn-download');
     const btnView = document.getElementById('btn-view');
 
+    function formatGradeLevel(grade) {
+        if (!grade) return 'General';
+        // Handle comma-separated grades by replacing with " or "
+        return grade.split(',').map(g => g.trim()).join(' or ');
+    }
+
     function openModal(res) {
         console.log('openModal called with:', res);
         try {
@@ -1054,9 +1220,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 compEl.previousElementSibling.style.display = 'none';
             }
 
-            document.getElementById('modal-authors').innerText = res.authors ? `Author: ${res.authors}` : 'Author: Unknown';
+            const authEl = document.getElementById('modal-authors');
+            if(res.authors && res.authors.trim() !== '') {
+                authEl.innerText = `Author: ${res.authors}`;
+                authEl.style.display = 'block';
+            } else {
+                authEl.style.display = 'none';
+            }
 
-            document.getElementById('modal-grade').innerText = res.grade_level || 'General';
+            document.getElementById('modal-grade').innerText = formatGradeLevel(res.grade_level);
             document.getElementById('modal-subject').innerText = res.learning_area || (res.category || 'General');
 
             // Inject Dynamic Meta
@@ -1075,6 +1247,7 @@ document.addEventListener('DOMContentLoaded', () => {
             addMeta('Resource Type', res.resource_type);
             addMeta('Curriculum', res.curriculum);
             addMeta('School Level', res.school_level);
+            addMeta('Grade Level', formatGradeLevel(res.grade_level));
             addMeta('Quarter', res.quarter);
             addMeta('Week', res.week);
             addMeta('Language', res.language);
@@ -1096,7 +1269,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             if (btnLike) {
-                btnLike.innerHTML = res.user_liked > 0 ? `<i class="fas fa-heart"></i> Liked` : `<i class="far fa-heart"></i> Like`;
+                btnLike.innerHTML = res.user_liked > 0 ? `<i class="fas fa-heart animated-like"></i> Liked` : `<i class="far fa-heart animated-like"></i> Like`;
                 btnLike.className = res.user_liked > 0 ? "btn btn-primary" : "btn btn-secondary";
             }
 
@@ -1285,21 +1458,52 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    document.getElementById('pdf-prev-page').addEventListener('click', (e) => {
-        e.stopPropagation();
+    function goPdfPrev(e) {
+        if(e) e.stopPropagation();
         if (customPdfPageNum <= 1) return;
         customPdfPageNum = Math.max(1, customPdfPageNum - (customPdfViewMode === 'double' ? 2 : 1));
         queueRenderPdfPage(customPdfPageNum);
-    });
+    }
 
-    document.getElementById('pdf-next-page').addEventListener('click', (e) => {
-        e.stopPropagation();
+    function goPdfNext(e) {
+        if(e) e.stopPropagation();
         if (!customPdfDoc) return;
         const step = (customPdfViewMode === 'double' ? 2 : 1);
         if (customPdfPageNum + (customPdfViewMode === 'double' ? 1 : 0) >= customPdfDoc.numPages) return;
         customPdfPageNum += step;
         queueRenderPdfPage(customPdfPageNum);
-    });
+    }
+
+    document.getElementById('pdf-prev-page').addEventListener('click', goPdfPrev);
+    document.getElementById('pdf-side-prev').addEventListener('click', goPdfPrev);
+
+    document.getElementById('pdf-next-page').addEventListener('click', goPdfNext);
+    document.getElementById('pdf-side-next').addEventListener('click', goPdfNext);
+
+    // Swipe navigation
+    let touchStartX = 0;
+    let touchEndX = 0;
+    
+    const pdfContainer = document.getElementById('pdf-viewer-container');
+    pdfContainer.addEventListener('touchstart', e => {
+        touchStartX = e.changedTouches[0].screenX;
+    }, {passive: true});
+
+    pdfContainer.addEventListener('touchend', e => {
+        touchEndX = e.changedTouches[0].screenX;
+        handleSwipe();
+    }, {passive: true});
+
+    function handleSwipe() {
+        if (touchEndX < touchStartX - 50) {
+            // Swipe Left -> Next Page
+            goPdfNext();
+        }
+        if (touchEndX > touchStartX + 50) {
+            // Swipe Right -> Prev Page
+            goPdfPrev();
+        }
+    }
 
     document.getElementById('close-pdf-viewer').addEventListener('click', (e) => {
         e.stopPropagation();
@@ -1408,7 +1612,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         renderPdfThumbnail(res.file_path, canvas);
                     });
                 } else {
-                    relatedRow.innerHTML = '<span style="color:#aaa;">No related resources based on competencies.</span>';
+                    relatedRow.innerHTML = '<span style="color:#aaa;">No related resources found.</span>';
                 }
             });
     }
@@ -1453,4 +1657,153 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     });
+
+    // ── Package Download Functions ─────────────────────────────
+
+    window.togglePkgSelectMode = function () {
+        window.pkgSelectMode = !window.pkgSelectMode;
+        window.selectedLRIds.clear();
+        // Reset visual selection on all cards
+        document.querySelectorAll('.pkg-selected').forEach(c => c.classList.remove('pkg-selected'));
+        const btn = document.getElementById('pkg-select-mode-btn');
+        if (window.pkgSelectMode) {
+            btn.className = 'btn btn-primary';
+            btn.innerHTML = '<i class="fas fa-times"></i> Exit Select';
+        } else {
+            btn.className = 'btn btn-secondary';
+            btn.innerHTML = '<i class="fas fa-check-square"></i> Select Mode';
+        }
+        pkgUpdateBar();
+        // Re-render so hover effects respect select mode
+        if (window.currentCategoryItems) applyCategoryFilters();
+    };
+
+    function pkgToggleCard(res, card) {
+        const id = res.id;
+        if (window.selectedLRIds.has(id)) {
+            window.selectedLRIds.delete(id);
+            card.classList.remove('pkg-selected');
+            card.style.transform = 'scale(1)';
+        } else {
+            if (window.selectedLRIds.size >= 30) {
+                pkgShowToast('Maximum 30 LRs can be selected at once.', 'warning');
+                return;
+            }
+            window.selectedLRIds.add(id);
+            card.classList.add('pkg-selected');
+        }
+        pkgUpdateBar();
+    }
+
+    function pkgUpdateBar() {
+        const bar   = document.getElementById('pkg-selected-bar');
+        const count = window.selectedLRIds.size;
+        if (bar) {
+            bar.style.display = (count > 0 && window.pkgSelectMode) ? 'flex' : 'none';
+            const lbl = document.getElementById('pkg-selected-count');
+            if (lbl) lbl.textContent = `${count} LR${count !== 1 ? 's' : ''} selected`;
+        }
+    }
+
+    window.pkgClearSelection = function () {
+        window.selectedLRIds.clear();
+        document.querySelectorAll('.pkg-selected').forEach(c => {
+            c.classList.remove('pkg-selected');
+            c.style.transform = 'scale(1)';
+        });
+        pkgUpdateBar();
+    };
+
+    window.pkgDownloadAll = function () {
+        const items = window.currentDisplayedItems || [];
+        if (items.length === 0) { pkgShowToast('No LRs to download in the current view.', 'warning'); return; }
+        const ids   = items.slice(0, 30).map(r => r.id);
+        const hints = pkgGetHints();
+        pkgTriggerDownload(ids, hints);
+    };
+
+    window.pkgDownloadSelected = function () {
+        if (window.selectedLRIds.size === 0) { pkgShowToast('No LRs selected.', 'warning'); return; }
+        const ids   = Array.from(window.selectedLRIds);
+        const hints = pkgGetHints();
+        pkgTriggerDownload(ids, hints);
+    };
+
+    function pkgGetHints() {
+        return {
+            category:      document.getElementById('category-full-title')?.innerText || '',
+            grade_level:   document.getElementById('filter-grade-level')?.value    || '',
+            learning_area: document.getElementById('filter-learning-area')?.value  || '',
+            resource_type: document.getElementById('filter-lr-type')?.value        || '',
+            quarter:       document.getElementById('filter-quarter')?.value        || ''
+        };
+    }
+
+    function pkgTriggerDownload(ids, hints) {
+        if (!ids || ids.length === 0) return;
+        const bundlingModal = document.getElementById('pkg-bundling-modal');
+        const bundlingMsg   = document.getElementById('pkg-bundling-msg');
+        bundlingModal.classList.remove('hidden');
+        bundlingModal.classList.add('active');
+        bundlingMsg.textContent = `Bundling ${ids.length} LR${ids.length !== 1 ? 's' : ''} into a ZIP\u2026 Please wait.`;
+
+        fetch('api/resources.php?action=package_download', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ ids, filename_hints: hints })
+        })
+        .then(response => {
+            if (!response.ok) {
+                // Try to read error JSON
+                return response.json().then(err => { throw new Error(err.message || 'Server error'); });
+            }
+            const disposition = response.headers.get('Content-Disposition') || '';
+            let filename = 'LRFLIX_Package.zip';
+            const match = disposition.match(/filename="([^"]+)"/);
+            if (match) filename = match[1];
+            return response.blob().then(blob => ({ blob, filename }));
+        })
+        .then(({ blob, filename }) => {
+            const url = URL.createObjectURL(blob);
+            const a   = document.createElement('a');
+            a.href     = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            bundlingModal.classList.add('hidden');
+            bundlingModal.classList.remove('active');
+            pkgShowToast(`\u2705 Package ready! ${ids.length} LR${ids.length !== 1 ? 's' : ''} downloaded.`, 'success');
+            loadResources(); // refresh download counts in background
+        })
+        .catch(err => {
+            bundlingModal.classList.add('hidden');
+            bundlingModal.classList.remove('active');
+            console.error('Package download error:', err);
+            pkgShowToast('\u274C Failed to create package: ' + (err.message || 'Unknown error'), 'error');
+        });
+    }
+
+    function pkgShowToast(message, type) {
+        const colors = { success: '#2ecc71', error: '#e50914', warning: '#f39c12' };
+        const toast  = document.createElement('div');
+        toast.style.cssText = [
+            'position:fixed', 'bottom:30px', 'left:50%', 'transform:translateX(-50%)',
+            `background:${colors[type] || colors.success}`, 'color:white',
+            'padding:13px 26px', 'border-radius:9px', 'font-weight:700',
+            'font-size:0.95rem', 'z-index:9999999',
+            'box-shadow:0 8px 30px rgba(0,0,0,0.5)',
+            'animation:pkgToastIn 0.3s ease', 'max-width:90vw', 'text-align:center'
+        ].join(';');
+        toast.textContent = message;
+        document.body.appendChild(toast);
+        setTimeout(() => {
+            toast.style.animation = 'pkgToastOut 0.3s ease forwards';
+            setTimeout(() => toast.remove(), 320);
+        }, 4000);
+    }
+    // ── End Package Download ───────────────────────────────────
+
 });

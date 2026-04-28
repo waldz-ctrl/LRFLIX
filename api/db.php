@@ -83,7 +83,9 @@ try {
         'component' => 'VARCHAR(100)',
         'module_no' => 'VARCHAR(50)',
         'camp_type' => 'VARCHAR(100)',
-        'material_type' => 'VARCHAR(100)'
+        'material_type' => 'VARCHAR(100)',
+        'key_stage' => 'VARCHAR(50)',
+        'term' => 'VARCHAR(50)'
     ];
     
     foreach ($res_cols as $col => $type) {

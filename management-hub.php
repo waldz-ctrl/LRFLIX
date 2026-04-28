@@ -181,7 +181,7 @@ if (!isAdmin()) {
 
                 <div class="input-group dynamic-field-group" id="group-grade" style="padding: 0 10px !important; display:none;">
                     <label>Grade Level <i class="fas fa-spinner fa-spin hidden" id="spin-res-grade"></i></label>
-                    <select id="res-grade" style="width: 100%; padding: 0.9rem; border-radius: 4px; background: #333; color: white;">
+                    <select id="res-grade" multiple style="width: 100%; padding: 0.9rem; border-radius: 4px; background: #333; color: white;">
                         <option value="">Select Grade...</option>
                     </select>
                     <input type="text" id="res-grade-custom" style="padding:12px 15px; margin-top:5px; display:none;" placeholder="Enter custom grade level">
@@ -210,7 +210,7 @@ if (!isAdmin()) {
                 </div>
 
                 <div class="input-group dynamic-field-group" id="group-authors" style="padding: 0 10px !important; display:none;">
-                    <label>Author(s) <button type="button" id="add-author-btn" style="background:transparent; color: var(--accent-color); border:none; cursor:pointer;">+ Add Another</button></label>
+                    <label>Author(s) <button type="button" id="add-author-btn" style="background:transparent; color: var(--red, #e50914); font-weight:bold; border:none; cursor:pointer;">+ Add Another</button></label>
                     <div id="authors-group">
                         <input type="text" class="res-author" placeholder="Author 1" style="margin-bottom: 5px; width:100%;">
                     </div>
@@ -226,14 +226,27 @@ if (!isAdmin()) {
                     </select>
                 </div>
                 
-                <div style="display:none; gap:10px; padding: 0 10px !important;grid-column: span 1;" class="dynamic-field-group" id="group-quarter-week">
-                    <div class="input-group" style="flex:1; display:none;" id="group-quarter">
-                        <label>Quarter/Term <i class="fas fa-spinner fa-spin hidden" id="spin-res-quarter"></i></label>
+                <div class="input-group dynamic-field-group" id="group-key-stage" style="padding: 0 10px !important; display:none;">
+                    <label>Key Stage <i class="fas fa-spinner fa-spin hidden" id="spin-res-key-stage"></i></label>
+                    <select id="res-key-stage" style="width: 100%; padding: 0.9rem; border-radius: 4px; background: #333; color: white;">
+                        <option value="">Select Key Stage...</option>
+                    </select>
+                </div>
+
+                <div style="display:none; gap:10px; padding: 0 10px !important;grid-column: 1 / -1;" class="dynamic-field-group" id="group-qtw">
+                    <div class="input-group" style="flex:1;" id="group-quarter">
+                        <label>Quarter <i class="fas fa-spinner fa-spin hidden" id="spin-res-quarter"></i></label>
                         <select id="res-quarter" style="width: 100%; padding: 0.9rem; border-radius: 4px; background: #333; color: white;">
-                            <option value="">Select Quarter/Term...</option>
+                            <option value="">Select Quarter...</option>
                         </select>
                     </div>
-                    <div class="input-group" style="flex:1; display:none;" id="group-week">
+                    <div class="input-group" style="flex:1;" id="group-term">
+                        <label>Term <i class="fas fa-spinner fa-spin hidden" id="spin-res-term"></i></label>
+                        <select id="res-term" style="width: 100%; padding: 0.9rem; border-radius: 4px; background: #333; color: white;">
+                            <option value="">Select Term...</option>
+                        </select>
+                    </div>
+                    <div class="input-group" style="flex:1;" id="group-week">
                         <label>Week <i class="fas fa-spinner fa-spin hidden" id="spin-res-week"></i></label>
                         <select id="res-week" style="width: 100%; padding: 0.9rem; border-radius: 4px; background: #333; color: white;">
                             <option value="">Select Week...</option>
@@ -243,7 +256,7 @@ if (!isAdmin()) {
                 </div>
 
                 <div class="input-group dynamic-field-group" id="group-comp" style="grid-column: 1 / -1; padding: 0 10px !important; display:none;">
-                    <label>Learning Competency (MELC) <button type="button" id="add-comp-btn" style="background:transparent; color: var(--accent-color); border:none; cursor:pointer;">+ Add Another</button></label>
+                    <label>Learning Competency (MELC) <button type="button" id="add-comp-btn" style="background:transparent; color: var(--red, #e50914); font-weight:bold; border:none; cursor:pointer;">+ Add Another</button></label>
                     <div id="competencies-group">
                         <div class="comp-select-wrapper" style="margin-bottom: 10px; position: relative;">
                             <select class="res-comp-select" id="res-comp-select" style="width: 100%; padding: 0.9rem; border-radius: 4px; background: #333; color: white;">
@@ -324,19 +337,20 @@ if (!isAdmin()) {
                     <option value="">All Subjects</option>
                 </select>
 
-                <button class="btn btn-secondary" id="resources-sort-downloads" type="button">Sort Downloads: High to Low</button>
+                <button class="btn btn-danger hidden" id="resources-batch-delete-btn" type="button" onclick="confirmBatchDeleteResources()"><i class="fas fa-trash-alt"></i> Delete Selected</button>
             </div>
             <div style="overflow-x:auto;">
                 <table class="data-table" id="resources-table">
                     <thead>
                         <tr>
-                            <th>Category</th>
-                            <th>LR Type</th>
-                            <th>Title</th>
-                            <th>Curriculum</th>
-                            <th>Level</th>
-                            <th>Grade & Subject</th>
-                            <th>Stats (D/L/V)</th>
+                            <th style="width: 40px; text-align: center;"><input type="checkbox" id="res-select-all" onclick="toggleSelectAllResources(this)"></th>
+                            <th onclick="toggleResourceSort('category')" style="cursor:pointer;">Category <i class="fas fa-sort" id="sort-category"></i></th>
+                            <th onclick="toggleResourceSort('resource_type')" style="cursor:pointer;">LR Type <i class="fas fa-sort" id="sort-resource_type"></i></th>
+                            <th onclick="toggleResourceSort('title')" style="cursor:pointer;">Title <i class="fas fa-sort" id="sort-title"></i></th>
+                            <th onclick="toggleResourceSort('curriculum')" style="cursor:pointer;">Curriculum <i class="fas fa-sort" id="sort-curriculum"></i></th>
+                            <th onclick="toggleResourceSort('school_level')" style="cursor:pointer;">Level <i class="fas fa-sort" id="sort-school_level"></i></th>
+                            <th onclick="toggleResourceSort('grade_subject')" style="cursor:pointer;">Grade & Subject <i class="fas fa-sort" id="sort-grade_subject"></i></th>
+                            <th onclick="toggleResourceSort('downloads_count')" style="cursor:pointer;">Stats (D/L/V) <i class="fas fa-sort" id="sort-downloads_count"></i></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -379,8 +393,14 @@ if (!isAdmin()) {
                 <select id="comp-filter-subject" style="padding:0.8rem 0.9rem; border-radius:6px; background:#222; border:1px solid #333; color:white;">
                     <option value="">All Subjects</option>
                 </select>
+                <select id="comp-filter-key-stage" style="padding:0.8rem 0.9rem; border-radius:6px; background:#222; border:1px solid #333; color:white;">
+                    <option value="">All Key Stages</option>
+                </select>
                 <select id="comp-filter-quarter" style="padding:0.8rem 0.9rem; border-radius:6px; background:#222; border:1px solid #333; color:white;">
-                    <option value="">All Quarter/Terms</option>
+                    <option value="">All Quarters</option>
+                </select>
+                <select id="comp-filter-term" style="padding:0.8rem 0.9rem; border-radius:6px; background:#222; border:1px solid #333; color:white;">
+                    <option value="">All Terms</option>
                 </select>
                 <select id="comp-filter-week" style="padding:0.8rem 0.9rem; border-radius:6px; background:#222; border:1px solid #333; color:white;">
                     <option value="">All Weeks</option>
@@ -395,8 +415,9 @@ if (!isAdmin()) {
                             <th>Code</th>
                             <th>Subject</th>
                             <th>School Level</th>
-                            <th>Grade Level</th>
-                            <th>Quarter/Term</th>
+                            <th>Key Stage / Grade Level</th>
+                            <th>Quarter / Term</th>
+                            <th>Week</th>
                             <th>MELC</th>
                         </tr>
                     </thead>
@@ -477,17 +498,8 @@ if (!isAdmin()) {
             </div>
 
             <!-- Period Toggle -->
-            <div style="margin-bottom: 1.5rem; display:flex; gap: 10px; flex-wrap:wrap; align-items:center;">
-                <span style="color:#aaa; margin-right:5px;">Filter by:</span>
-                <button class="btn btn-primary period-btn" data-period="day">Today</button>
-                <button class="btn btn-secondary period-btn" data-period="week">This Week</button>
-                <button class="btn btn-secondary period-btn" data-period="month">This Month</button>
-                <button class="btn btn-secondary period-btn" data-period="year">This Year</button>
-                <input type="date" id="custom-date-filter" style="padding:0; padding-left:0.6rem; padding-right:0.6rem; border-radius:4px; background:#333; color:white; border:1px solid #444; outline:none; height:42px; cursor:pointer;" title="Select a specific date">
-                
-                <div style="margin-left: auto;">
-                    <button class="btn btn-primary" onclick="openReportModal()" style="height:42px;"><i class="fas fa-file-export"></i> Generate Report</button>
-                </div>
+            <div style="margin-bottom: 1.5rem; display:flex; justify-content:flex-end;">
+                <button class="btn btn-primary" onclick="openReportModal()" style="height:42px;"><i class="fas fa-file-export"></i> Generate Report</button>
             </div>
 
             <!-- Charts: stacked full width -->
@@ -699,8 +711,25 @@ if (!isAdmin()) {
 
                 <div style="display:flex; gap:15px;">
                     <div class="input-group" style="flex:1;">
-                        <label>Quarter/Term</label>
+                        <label>Key Stage</label>
+                        <input type="text" id="comp-key-stage" style="width:100%; padding:0.8rem; border-radius:6px; background:#333; color:white; border:1px solid #444;">
+                    </div>
+                    <div class="input-group" style="flex:1;">
+                        <label>Quarter</label>
                         <select id="comp-quarter" style="width:100%; padding:0.8rem; border-radius:6px; background:#333; color:white; border:1px solid #444;">
+                            <option value="">Select...</option>
+                            <option value="1">1</option>
+                            <option value="2">2</option>
+                            <option value="3">3</option>
+                            <option value="4">4</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div style="display:flex; gap:15px;">
+                    <div class="input-group" style="flex:1;">
+                        <label>Term</label>
+                        <select id="comp-term" style="width:100%; padding:0.8rem; border-radius:6px; background:#333; color:white; border:1px solid #444;">
                             <option value="">Select...</option>
                             <option value="1">1</option>
                             <option value="2">2</option>
@@ -767,6 +796,6 @@ if (!isAdmin()) {
         </div>
     </div>
 
-    <script src="js/admin.js"></script>
+    <script src="js/admin.js?v=<?= time() ?>"></script>
 </body>
 </html>

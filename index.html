@@ -479,14 +479,14 @@
         <section id="hero-section" class="hero">
             <div class="hero-content">
                 <span id="hero-badge"
-                    style="background:var(--accent-color); color:white; padding:3px 8px; font-weight:700; border-radius:4px; font-size:0.75rem; margin-bottom:10px; display:inline-block;">Featured</span>
+                    style="background:rgba(229,9,20,0.12); color:#e50914; padding:4px 12px; font-weight:800; border-radius:4px; font-size:0.72rem; margin-bottom:12px; display:inline-block; border:1px solid #e50914; letter-spacing:0.12em; text-transform:uppercase; text-shadow:0 0 8px rgba(229,9,20,0.5);">&#9733; Featured</span>
                 <h1 id="hero-title" style="margin-bottom:15px; text-shadow:2px 2px 4px rgba(0,0,0,0.9);">Welcome to
                     LRFlix</h1>
                 <p id="hero-desc"
                     style="margin-bottom:20px; text-shadow:1px 1px 3px rgba(0,0,0,0.8); display:-webkit-box; -webkit-line-clamp:3; line-clamp:3; -webkit-box-orient:vertical; overflow:hidden;">
                     Explore high-quality learning resources curated for the Batanes community.</p>
                 <div class="hero-buttons">
-                    <button id="hero-view-btn" class="btn btn-primary"><i class="fas fa-play"></i> Get Started</button>
+                    <button id="hero-view-btn" class="btn btn-primary"><span class="flipping-book"><i class="fas fa-book-open"></i></span> Get Started</button>
                 </div>
             </div>
         </section>
@@ -497,13 +497,6 @@
                 style="display:flex; justify-content:space-between; align-items:center; margin-bottom:25px; flex-wrap:wrap; gap:15px; padding: 0 4%;">
                 <div style="display:flex; align-items:baseline; gap:15px; flex-wrap:wrap;">
                     <h2 id="category-full-title" style="font-size:clamp(1.4rem,4vw,2rem); margin:0;">Category</h2>
-                    <div style="position:relative; min-width:250px;">
-                        <i class="fas fa-search" style="position:absolute; left:12px; top:50%; transform:translateY(-50%); color:#666; font-size:0.9rem;"></i>
-                        <input type="text" id="category-search" placeholder="Search in this category..." 
-                            style="width:100%; padding:10px 15px 10px 35px; border-radius:30px; border:1px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.05); color:white; outline:none; font-size:0.9rem; transition:0.3s;"
-                            onfocus="this.style.background='rgba(255,255,255,0.1)'; this.style.borderColor='var(--accent-color)'"
-                            onblur="this.style.background='rgba(255,255,255,0.05)'; this.style.borderColor='rgba(255,255,255,0.1)'">
-                    </div>
                 </div>
                 <button class="btn btn-secondary" onclick="closeCategoryView()"><i class="fas fa-arrow-left"></i>
                     Back</button>
@@ -511,6 +504,7 @@
             
             <!-- Filters Row -->
             <div id="category-filters" style="display:flex; gap:10px; margin-bottom:25px; padding:0 4%; flex-wrap:wrap; align-items:center;">
+                <input type="text" id="category-search" placeholder="Search in this category..." style="padding:0.7rem 0.9rem; border-radius:6px; border:1px solid rgba(255,255,255,0.1); background:#2b2b2b; color:white; min-width:220px; font-size:0.9rem;">
                 <select id="filter-lr-type" class="cat-filter-select"><option value="">All LR Types</option></select>
                 <select id="filter-school-level" class="cat-filter-select"><option value="">All Levels</option></select>
                 <select id="filter-grade-level" class="cat-filter-select"><option value="">All Grades</option></select>
@@ -518,7 +512,31 @@
                 <select id="filter-learning-area" class="cat-filter-select"><option value="">All Subject Areas</option></select>
                 <button class="btn btn-secondary" style="padding:8px 12px; font-size:0.8rem; background:transparent; border:1px solid #444;" onclick="resetCategoryFilters()"><i class="fas fa-sync-alt"></i> Reset</button>
             </div>
-            <div id="category-full-grid" style="display:block; padding: 0;">
+
+            <!-- Package Download Toolbar -->
+            <div id="pkg-download-toolbar" style="display:none; gap:12px; align-items:center; margin-bottom:20px; padding:0 4%; flex-wrap:wrap;">
+                <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                    <button id="pkg-select-mode-btn" class="btn btn-secondary" onclick="togglePkgSelectMode()" style="padding:8px 16px; font-size:0.85rem;">
+                        <i class="fas fa-check-square"></i> Select Mode
+                    </button>
+                    <button id="pkg-download-all-btn" class="btn btn-secondary" onclick="pkgDownloadAll()" style="padding:8px 16px; font-size:0.85rem; background:rgba(52,152,219,0.15); border-color:#3498db; color:#3498db;">
+                        <i class="fas fa-box-open"></i> <span id="pkg-all-label">Download All</span>
+                    </button>
+                </div>
+                <!-- Selected items action bar -->
+                <div id="pkg-selected-bar" style="display:none; align-items:center; gap:10px; background:rgba(229,9,20,0.1); border:1px solid rgba(229,9,20,0.3); padding:8px 16px; border-radius:8px;">
+                    <i class="fas fa-box-open" style="color:#e50914;"></i>
+                    <span id="pkg-selected-count" style="color:#e50914; font-weight:700; font-size:0.9rem;">0 selected</span>
+                    <button class="btn btn-primary" onclick="pkgDownloadSelected()" style="padding:7px 16px; font-size:0.85rem;">
+                        <i class="fas fa-download"></i> Download Selected
+                    </button>
+                    <button class="btn btn-secondary" onclick="pkgClearSelection()" style="padding:7px 12px; font-size:0.85rem;">
+                        <i class="fas fa-times"></i> Clear
+                    </button>
+                </div>
+            </div>
+
+            <div id="category-full-grid">
                 <!-- Rows will be injected here as block elements to ensure they take full width -->
             </div>
         </div>
@@ -621,12 +639,12 @@
             <div class="modal-body" style="padding: 1.5rem 50px 3rem 50px;">
 
                 <div style="display:flex; gap:16px; margin-bottom:24px; flex-wrap:wrap;">
-                    <button class="btn btn-primary" id="btn-view" style="padding:10px 24px;"><i class="fas fa-play"></i>
+                    <button class="btn btn-primary" id="btn-view" style="padding:10px 24px;"><i class="fas fa-eye animated-eye"></i>
                         View Now</button>
                     <button class="btn btn-secondary" id="btn-download" style="padding:10px 20px;"><i
-                            class="fas fa-download"></i> Download</button>
+                            class="fas fa-download animated-download"></i> Download</button>
                     <button class="btn btn-secondary" id="btn-like" style="min-width:120px; padding:10px 20px;"><i
-                            class="far fa-heart"></i> Like</button>
+                            class="far fa-heart animated-like"></i> Like</button>
                 </div>
 
                 <div
@@ -842,6 +860,10 @@
                             class="fas fa-download"></i> Download</button>
                 </div>
             </div>
+            <!-- Side Navigation Buttons -->
+            <button class="btn btn-secondary pdf-nav-btn" id="pdf-side-prev" style="position:absolute; left:15px; top:55%; transform:translateY(-50%); z-index:1000; width:50px; height:50px; border-radius:50%; font-size:1.5rem; opacity:0.5; transition:0.3s; background:rgba(0,0,0,0.7); display:flex; align-items:center; justify-content:center; border:1px solid rgba(255,255,255,0.2);"><i class="fas fa-chevron-left"></i></button>
+            <button class="btn btn-secondary pdf-nav-btn" id="pdf-side-next" style="position:absolute; right:15px; top:55%; transform:translateY(-50%); z-index:1000; width:50px; height:50px; border-radius:50%; font-size:1.5rem; opacity:0.5; transition:0.3s; background:rgba(0,0,0,0.7); display:flex; align-items:center; justify-content:center; border:1px solid rgba(255,255,255,0.2);"><i class="fas fa-chevron-right"></i></button>
+
             <!-- Canvas area -->
             <div id="pdf-viewer-container" onclick="event.stopPropagation();"
                 style="flex:1; overflow-y:auto; overflow-x:auto; display:flex; justify-content:center; align-items:flex-start; padding:24px 16px; background:#3a3a3a;">
@@ -866,6 +888,16 @@
              <h2 style="margin-bottom:10px;">Success!</h2>
              <p style="color:#aaa; margin-bottom:2rem;">Your feedback has been sent to the administrators. Thank you for your contribution!</p>
              <button class="btn btn-primary" onclick="document.getElementById('feedback-success-modal').classList.add('hidden')" style="width:100%;">Great!</button>
+        </div>
+    </div>
+
+    <!-- Package Bundling Modal -->
+    <div id="pkg-bundling-modal" class="modal-overlay hidden" style="z-index:9999998;">
+        <div class="modal-content" style="max-width:420px; text-align:center; padding:3rem 2rem; background:#1a1a1a; border:1px solid #333;">
+            <div style="width:72px; height:72px; border:4px solid #333; border-top-color:#3498db; border-radius:50%; margin:0 auto 1.5rem; animation:pkgSpin 0.9s linear infinite;"></div>
+            <h2 style="margin-bottom:12px; font-size:1.4rem;"><i class="fas fa-box-open" style="color:#3498db;"></i> Bundling Package</h2>
+            <p id="pkg-bundling-msg" style="color:#aaa; font-size:0.95rem;">Preparing your LR package…</p>
+            <p style="color:#666; font-size:0.8rem; margin-top:10px;">Do not close this tab.</p>
         </div>
     </div>
 
