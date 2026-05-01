@@ -236,14 +236,17 @@
                         </div>
                         <div class="input-group">
                             <label>DepEd Email Address <span class="req">*</span></label>
-                            <input type="email" id="deped_email" placeholder="yourname@deped.gov.ph">
+                            <div style="position:relative; display:flex; align-items:center;">
+                                <input type="text" id="deped_email" placeholder="username" style="padding-right:125px; width:100%;">
+                                <span style="position:absolute; right:15px; color:#888; font-weight:500; font-size:0.9rem; pointer-events:none;">@deped.gov.ph</span>
+                            </div>
                         </div>
 
 
                     </div>
 
                     <!-- Teaching Assignment -->
-                    <div id="teaching-assignment-section" class="form-section">
+                    <div id="teaching-assignment-section" class="form-section hidden">
 
                         <div class="form-section-title">Teaching Assignment</div>
                         <div class="input-group">
@@ -437,40 +440,36 @@
     <!-- Main App View -->
     <div id="app-view" class="hidden">
         <nav id="navbar">
-            <div style="display:flex; align-items:center; gap:20px;">
-                <div class="brand" style="cursor:pointer;" onclick="window.location.reload();">LRFLIX</div>
-                <div class="cat-menu">
-                    <button class="btn btn-secondary"
-                        style="background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.1);"><i
-                            class="fas fa-list"></i> Categories ▼</button>
-                    <div class="cat-content">
-                        <a onclick="filterCategory('MATATAG Curriculum Resources')">MATATAG Curriculum Resources</a>
-                        <a onclick="filterCategory('K to 12 Curriculum Resources')">K to 12 Curriculum Resources</a>
-                        <a onclick="filterCategory('Contextualized Learning Resources (CLRs)')">Contextualized Learning Resources (CLRs)</a>
-                        <a onclick="filterCategory('National Learning Camp (NLC)')">National Learning Camp (NLC)</a>
-                        <a onclick="filterCategory('National Reading Program (NRP)')">National Reading Program (NRP)</a>
-                    </div>
+            <div class="nav-left" style="display:flex; align-items:center; gap:35px;">
+                <div style="display: flex; flex-direction: column; flex-shrink: 0;">
+                    <div class="brand" style="cursor:pointer;" onclick="window.location.reload();">LRFLIX</div>
+                    <div style="font-size: 0.65rem; color: #888; font-weight: 500; margin-top: -4px; white-space: nowrap;" class="brand-subtext">The Official LR Portal of SDO Batanes</div>
                 </div>
-                <div class="search-container" style="position:relative; margin-left:10px;">
-                    <i class="fas fa-search"
-                        style="position:absolute; left:12px; top:50%; transform:translateY(-50%); color:#777;"></i>
-                    <input type="text" id="main-search" placeholder="Search titles or authors..."
-                        style="background:#141414; border:1px solid #333; color:white; padding:8px 12px 8px 35px; border-radius:20px; width:250px; font-size:0.9rem; transition: width 0.3s, border-color 0.3s; outline:none;">
+                <div class="nav-categories" style="display:flex; align-items:center; gap:20px;">
+                    <a onclick="window.location.reload()" data-title="Back to Home" class="nav-cat-link">Home</a>
+                    <a onclick="filterCategory('MATATAG Curriculum Resources')" data-title="MATATAG Curriculum Resources" class="nav-cat-link">MATATAG</a>
+                    <a onclick="filterCategory('K to 12 Curriculum Resources')" data-title="K to 12 Curriculum Resources" class="nav-cat-link">K to 12</a>
+                    <a onclick="filterCategory('Contextualized Learning Resources (CLRs)')" data-title="Contextualized Learning Resources (CLRs)" class="nav-cat-link">CLRs</a>
+                    <a onclick="filterCategory('National Learning Camp (NLC)')" data-title="National Learning Camp (NLC)" class="nav-cat-link">NLC</a>
+                    <a onclick="filterCategory('National Reading Program (NRP)')" data-title="National Reading Program (NRP)" class="nav-cat-link">NRP</a>
                 </div>
             </div>
-            <div class="nav-links">
-                <span id="welcome-user" style="font-size:0.9rem; color:#ccc; font-weight:500; cursor:pointer;"
-                    title="View Profile"></span>
-                <div id="nav-profile-circle"
-                    style="width:36px; height:36px; border-radius:50%; background:#e50914; color:white; display:none; align-items:center; justify-content:center; font-weight:800; cursor:pointer; font-size:1.1rem; margin-left:10px;">
-                    ?</div>
-                <button id="admin-btn" class="btn btn-secondary hidden"
-                    onclick="window.location.href='management-hub.php'">Admin Panel</button>
-                <button id="logout-btn" class="btn btn-primary" style="padding:8px 16px;"><i
-                        class="fas fa-sign-out-alt"></i> Logout</button>
+
+            <div class="nav-right" style="display:flex; align-items:center; gap:15px;">
+                <div class="search-container">
+                    <i class="fas fa-search search-icon"></i>
+                    <input type="text" id="main-search" placeholder="Search titles or authors...">
+                </div>
+                <div class="nav-links" style="display:flex; align-items:center; gap:15px;">
+                    <button id="admin-btn" class="btn btn-secondary hidden"
+                        onclick="window.location.href='management-hub.php'">Admin Panel</button>
+                    <div id="nav-profile-circle" data-title="View Profile"
+                        style="width:36px; height:36px; border-radius:50%; background:#e50914; color:white; display:none; align-items:center; justify-content:center; font-weight:800; cursor:pointer; font-size:1.1rem;">
+                        ?</div>
+                    <button id="logout-btn" class="btn btn-primary" style="padding:8px 16px;" data-title="Exit Session"><i
+                            class="fas fa-sign-out-alt"></i> <span>Logout</span></button>
+                </div>
             </div>
-
-
         </nav>
 
 
@@ -508,8 +507,10 @@
                 <select id="filter-lr-type" class="cat-filter-select"><option value="">All LR Types</option></select>
                 <select id="filter-school-level" class="cat-filter-select"><option value="">All Levels</option></select>
                 <select id="filter-grade-level" class="cat-filter-select"><option value="">All Grades</option></select>
-                <select id="filter-quarter" class="cat-filter-select"><option value="">All Quarters</option></select>
                 <select id="filter-learning-area" class="cat-filter-select"><option value="">All Subject Areas</option></select>
+                <select id="filter-quarter" class="cat-filter-select"><option value="">All Quarters</option></select>
+                <select id="filter-term" class="cat-filter-select"><option value="">All Terms</option></select>
+                <select id="filter-week" class="cat-filter-select"><option value="">All Weeks</option></select>
                 <button class="btn btn-secondary" style="padding:8px 12px; font-size:0.8rem; background:transparent; border:1px solid #444;" onclick="resetCategoryFilters()"><i class="fas fa-sync-alt"></i> Reset</button>
             </div>
 
@@ -721,8 +722,7 @@
             <button class="modal-close"
                 onclick="document.getElementById('edit-profile-modal').classList.add('hidden'); document.getElementById('edit-profile-modal').classList.remove('active');"><i
                     class="fas fa-times"></i></button>
-            <h2 style="margin-bottom:1.5rem; border-bottom:1px solid #333; padding-bottom:10px;">Update Professional
-                Details</h2>
+            <h2 style="margin-bottom:1.5rem; border-bottom:1px solid #333; padding-bottom:10px;">Update Details</h2>
 
             <form id="edit-profile-form" style="max-height:75vh; overflow-y:auto; padding-right:15px;">
                 <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:20px;">
@@ -758,10 +758,10 @@
                     </div>
                 </div>
 
-                <div style="margin-top:20px; border-top:1px solid #333; padding-top:15px;">
+                <div id="edit-teaching-section" style="margin-top:20px; border-top:1px solid #333; padding-top:15px;">
                     <label style="display:block; margin-bottom:10px; font-weight:600;">Teaching Assignment / Grade Level</label>
                     <div style="display:grid; grid-template-columns: 1fr 1fr; gap:30px;">
-                        <div>
+                        <div id="edit_subjects_taught_container">
                             <label style="font-size:0.8rem; color:#aaa; margin-bottom:10px; display:block;">Subjects Taught</label>
                             <div id="edit_subjects_taught" class="checkbox-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
                                 <label><input type="checkbox" value="English"> English</label>

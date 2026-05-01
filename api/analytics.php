@@ -146,12 +146,12 @@ switch ($period) {
         $downloadCategoryWhere = "WHERE YEAR(d.$downloadTsCol) = YEAR(CURDATE())";
         break;
 }
-$categorySql = "SELECT r.category, COUNT(d.id) as total
+$categorySql = "SELECT r.category, r.resource_type, COUNT(d.id) as total
                 FROM downloads d
                 JOIN resources r ON r.id = d.resource_id
                 $downloadCategoryWhere
-                GROUP BY r.category
-                ORDER BY total DESC";
+                GROUP BY r.category, r.resource_type
+                ORDER BY r.category, total DESC";
 if (!empty($downloadCategoryParams)) {
     $categoryStmt = $pdo->prepare($categorySql);
     $categoryStmt->execute($downloadCategoryParams);
@@ -159,7 +159,7 @@ if (!empty($downloadCategoryParams)) {
 } else {
     $categoryData = $pdo->query($categorySql)->fetchAll();
 }
-$resourcesPerCategory = $pdo->query("SELECT category, COUNT(id) as total FROM resources GROUP BY category ORDER BY total DESC")->fetchAll();
+$resourcesPerCategory = $pdo->query("SELECT category, resource_type, COUNT(id) as total FROM resources GROUP BY category, resource_type ORDER BY category, total DESC")->fetchAll();
 $totalUsers = $pdo->query("SELECT COUNT(*) FROM users WHERE role != 'admin'")->fetchColumn();
 $totalResources = $pdo->query("SELECT COUNT(*) FROM resources")->fetchColumn();
 $totalDownloads = $pdo->query("SELECT SUM(downloads_count) FROM resources")->fetchColumn() ?? 0;

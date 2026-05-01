@@ -194,7 +194,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 formData.append('age_range', val('age_range'));
                 formData.append('subjects_taught', isTeachingStaff ? subjects.join(', ') : '');
                 formData.append('grade_level', isTeachingStaff ? grades.join(', ') : '');
-                formData.append('deped_email', val('deped_email'));
+                formData.append('deped_email', val('deped_email') + '@deped.gov.ph');
             } else if (role === 'student') {
 
                 // Manual Validation
@@ -298,6 +298,25 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         checkBtnState();
     });
+
+    // Toggle Teaching Assignment Section based on Position
+    const positionSelect = document.getElementById('position');
+    if (positionSelect) {
+        positionSelect.addEventListener('change', function() {
+            const teachingSec = document.getElementById('teaching-assignment-section');
+            if (!teachingSec) return;
+            
+            const selectedOpt = this.options[this.selectedIndex];
+            const group = selectedOpt.parentElement;
+            
+            // Show only if the selected position is under the "Teaching Staff" group
+            if (group && group.label === "Teaching Staff") {
+                teachingSec.classList.remove('hidden');
+            } else {
+                teachingSec.classList.add('hidden');
+            }
+        });
+    }
 
     document.getElementById('password').addEventListener('input', checkBtnState);
 
@@ -410,15 +429,13 @@ document.addEventListener('DOMContentLoaded', () => {
         authView.classList.add('hidden');
         appView.classList.remove('hidden');
 
-        const firstName = currentUser.first_name || currentUser.username;
-        document.getElementById('welcome-user').innerText = `Welcome, ${firstName}`;
-
         // Dynamic Profile Circle (Red background, white text)
         const profileCircle = document.getElementById('nav-profile-circle');
         if (profileCircle) {
             profileCircle.innerText = (currentUser.first_name || currentUser.username).charAt(0).toUpperCase();
             profileCircle.style.display = 'flex';
             profileCircle.onclick = showProfile;
+            profileCircle.dataset.title = "Profile: " + (currentUser.first_name || currentUser.username);
         }
 
         if (currentUser.role === 'admin') {
@@ -441,6 +458,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (fullView) fullView.classList.add('hidden');
                 }
             });
+            
+            // Focus input when clicking search icon
+            const searchIcon = document.querySelector('.search-icon');
+            if (searchIcon) {
+                searchIcon.addEventListener('click', () => searchInput.focus());
+            }
         }
 
         // Profile toggle
@@ -448,7 +471,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (profBtn) {
             profBtn.addEventListener('click', showProfile);
         }
-        document.getElementById('welcome-user').addEventListener('click', showProfile);
+        const welcomeUser = document.getElementById('welcome-user');
+        if (welcomeUser) {
+            welcomeUser.addEventListener('click', showProfile);
+        }
     }
 
     function filterSearch(term) {
@@ -481,33 +507,11 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        renderGridItems(filtered, grid);
+        // Use the optimized renderCategoryGrid logic for search results too
+        renderCategoryGrid(filtered);
     }
 
-    function renderGridItems(items, grid) {
-        items.forEach(res => {
-            const card = document.createElement('div');
-            card.className = 'poster-card';
-            card.style.cssText = 'width:100%; max-width:200px; cursor:pointer; position:relative; border-radius:6px; overflow:hidden; background:#222; transition:transform 0.3s; box-shadow: 0 4px 15px rgba(0,0,0,0.5);';
-            card.addEventListener('mouseenter', () => card.style.transform = 'scale(1.05)');
-            card.addEventListener('mouseleave', () => card.style.transform = 'scale(1)');
-            card.addEventListener('click', () => openModal(res));
-
-            const canvas = document.createElement('canvas');
-            canvas.className = 'poster';
-            canvas.style.cssText = 'width:100%; height:280px; background:#222; display:block; margin:0; object-fit: cover;';
-            canvas.title = res.title;
-
-            const label = document.createElement('div');
-            label.style.cssText = 'padding:10px; font-size:0.85rem; font-weight:600; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; background: rgba(0,0,0,0.7);';
-            label.textContent = res.title;
-
-            card.appendChild(canvas);
-            card.appendChild(label);
-            grid.appendChild(card);
-            renderPdfThumbnail(res.file_path, canvas);
-        });
-    }
+    // (Removed redundant renderGridItems as it's merged into renderCategoryGrid)
 
     // Profile Logic
     function showProfile() {
@@ -654,7 +658,39 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('edit_last_name').value = u.last_name || '';
             document.getElementById('edit_position').value = u.position || '';
             document.getElementById('edit_age_range').value = u.age_range || '18-24';
+
+            const teachingPositions = [
+                'Teacher I', 'Teacher II', 'Teacher III', 'Teacher IV', 'Teacher V', 'Teacher VI', 'Teacher VII',
+                'Master Teacher I', 'Master Teacher II', 'Master Teacher III', 'Master Teacher IV'
+            ];
+
+            const toggleTeachingSection = (pos) => {
+                const section = document.getElementById('edit-teaching-section');
+                if (section) {
+                    if (teachingPositions.includes(pos)) {
+                        section.style.display = 'block';
+                    } else {
+                        section.style.display = 'none';
+                    }
+                }
+            };
+
+            toggleTeachingSection(u.position);
+
+            // Add dynamic listener for position changes in the modal
+            document.getElementById('edit_position').onchange = (e) => toggleTeachingSection(e.target.value);
+            document.getElementById('edit_position').oninput = (e) => toggleTeachingSection(e.target.value);
             
+            // Hide Subjects Taught specifically for Student role if the section is somehow visible
+            const subjContainer = document.getElementById('edit_subjects_taught_container');
+            if(subjContainer) {
+                if(u.role === 'Student / Learner') {
+                    subjContainer.style.display = 'none';
+                } else {
+                    subjContainer.style.display = 'block';
+                }
+            }
+
             const setChecks = (id, str) => {
                 const el = document.getElementById(id);
                 if(!el) return;
@@ -918,9 +954,12 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     window.resetCategoryFilters = () => {
-        ['filter-lr-type', 'filter-school-level', 'filter-grade-level', 'filter-quarter', 'filter-learning-area'].forEach(id => {
+        ['filter-lr-type', 'filter-school-level', 'filter-grade-level', 'filter-quarter', 'filter-term', 'filter-week', 'filter-learning-area'].forEach(id => {
             const el = document.getElementById(id);
-            if(el) el.value = '';
+            if(el) {
+                el.value = '';
+                el.disabled = false;
+            }
         });
         if(document.getElementById('category-search')) document.getElementById('category-search').value = '';
         if(window.currentCategoryItems) renderCategoryGrid(window.currentCategoryItems);
@@ -940,42 +979,82 @@ document.addEventListener('DOMContentLoaded', () => {
         fill('filter-lr-type', getUnique('resource_type'), 'All LR Types');
         fill('filter-school-level', getUnique('school_level'), 'All Levels');
         fill('filter-grade-level', getUnique('grade_level'), 'All Grades');
-        fill('filter-quarter', getUnique('quarter'), 'All Quarters');
         fill('filter-learning-area', getUnique('learning_area'), 'All Subject Areas');
+        fill('filter-quarter', getUnique('quarter'), 'All Quarters');
+        fill('filter-term', getUnique('term'), 'All Terms');
+        fill('filter-week', getUnique('week'), 'All Weeks');
     }
 
     function applyCategoryFilters() {
         if(!window.currentCategoryItems) return;
         
-        const term = (document.getElementById('category-search')?.value || '').toLowerCase();
+        const termSearch = (document.getElementById('category-search')?.value || '').toLowerCase();
         const lrType = document.getElementById('filter-lr-type').value;
         const schoolLevel = document.getElementById('filter-school-level').value;
         const gradeLevel = document.getElementById('filter-grade-level').value;
-        const quarter = document.getElementById('filter-quarter').value;
         const learningArea = document.getElementById('filter-learning-area').value;
+        const quarter = document.getElementById('filter-quarter').value;
+        const termVal = document.getElementById('filter-term').value;
+        const week = document.getElementById('filter-week').value;
 
         const filtered = window.currentCategoryItems.filter(r => {
-            const matchSearch = !term || 
-                (r.title || '').toLowerCase().includes(term) || 
-                (r.description || '').toLowerCase().includes(term) ||
-                (r.authors || '').toLowerCase().includes(term) ||
-                (r.resource_type || '').toLowerCase().includes(term);
+            const matchSearch = !termSearch || 
+                (r.title || '').toLowerCase().includes(termSearch) || 
+                (r.description || '').toLowerCase().includes(termSearch) ||
+                (r.authors || '').toLowerCase().includes(termSearch) ||
+                (r.resource_type || '').toLowerCase().includes(termSearch);
             const matchType = !lrType || r.resource_type === lrType;
             const matchSchool = !schoolLevel || r.school_level === schoolLevel;
             const matchGrade = !gradeLevel || r.grade_level === gradeLevel;
             const matchQuarter = !quarter || String(r.quarter) === quarter;
+            const matchTerm = !termVal || String(r.term) === termVal;
+            const matchWeek = !week || String(r.week) === week;
             const matchArea = !learningArea || r.learning_area === learningArea;
             
-            return matchSearch && matchType && matchSchool && matchGrade && matchQuarter && matchArea;
+            return matchSearch && matchType && matchSchool && matchGrade && matchQuarter && matchTerm && matchWeek && matchArea;
         });
+        
+        const btn = document.getElementById('pkg-download-all-btn');
+        if (btn) {
+            if (lrType && schoolLevel && gradeLevel && quarter && learningArea) {
+                btn.style.opacity = '1';
+                btn.style.cursor = 'pointer';
+            } else {
+                btn.style.opacity = '0.5';
+                btn.style.cursor = 'not-allowed';
+            }
+        }
         
         renderCategoryGrid(filtered);
     }
 
     // Attach listeners
-    ['category-search', 'filter-lr-type', 'filter-school-level', 'filter-grade-level', 'filter-quarter', 'filter-learning-area'].forEach(id => {
-        document.getElementById(id)?.addEventListener('input', applyCategoryFilters);
+    ['category-search', 'filter-lr-type', 'filter-school-level', 'filter-grade-level', 'filter-learning-area', 'filter-quarter', 'filter-term', 'filter-week'].forEach(id => {
+        document.getElementById(id)?.addEventListener('change', applyCategoryFilters);
+        if (id === 'category-search') document.getElementById(id).addEventListener('input', applyCategoryFilters);
     });
+
+    // Mutual Exclusion for Quarter and Term
+    const qFilter = document.getElementById('filter-quarter');
+    const tFilter = document.getElementById('filter-term');
+    if (qFilter && tFilter) {
+        qFilter.addEventListener('change', () => {
+            if (qFilter.value !== '') {
+                tFilter.value = '';
+                tFilter.disabled = true;
+            } else {
+                tFilter.disabled = false;
+            }
+        });
+        tFilter.addEventListener('change', () => {
+            if (tFilter.value !== '') {
+                qFilter.value = '';
+                qFilter.disabled = true;
+            } else {
+                qFilter.disabled = false;
+            }
+        });
+    }
 
     window.filterCategory = function (cat) {
         // Reset pkg select mode on category switch
@@ -1013,17 +1092,51 @@ document.addEventListener('DOMContentLoaded', () => {
         renderCategoryGrid(window.currentCategoryItems);
     };
 
-    function renderCategoryGrid(items) {
-        // Track displayed items for "Download All"
-        window.currentDisplayedItems = items;
-        const cap = Math.min(items.length, 30);
-        const allLabel = document.getElementById('pkg-all-label');
-        if (allLabel) {
-            allLabel.textContent = items.length > 0
-                ? `Download All (${cap} LR${cap !== 1 ? 's' : ''})`
-                : 'Download All';
-        }
+    function checkAnyFilterActive() {
+        // Check if we are in search mode (global search)
+        const isGlobalSearch = (document.getElementById('main-search')?.value || '').trim() !== '';
+        if (isGlobalSearch) return true;
 
+        const filters = ['category-search', 'filter-lr-type', 'filter-school-level', 'filter-grade-level', 'filter-learning-area', 'filter-quarter', 'filter-term', 'filter-week'];
+        return filters.some(id => {
+            const el = document.getElementById(id);
+            return el && el.value !== '';
+        });
+    }
+
+    function createPosterCard(res) {
+        const card = document.createElement('div');
+        card.className = 'poster-card';
+        card.style.cssText = 'min-width:200px; max-width:200px; cursor:pointer; position:relative; border-radius:6px; overflow:hidden; background:#222; transition:transform 0.3s; height:280px;';
+        card.dataset.filePath = res.file_path;
+        card.addEventListener('mouseenter', () => { if (!window.pkgSelectMode) card.style.transform = 'scale(1.05)'; });
+        card.addEventListener('mouseleave', () => { if (!card.classList.contains('pkg-selected')) card.style.transform = 'scale(1)'; });
+        card.addEventListener('click', () => {
+            if (window.pkgSelectMode) { pkgToggleCard(res, card); }
+            else { openModal(res); }
+        });
+        
+        const pkgOverlay = document.createElement('div');
+        pkgOverlay.className = 'pkg-check-overlay';
+        pkgOverlay.innerHTML = '<i class="fas fa-check"></i>';
+        card.appendChild(pkgOverlay);
+
+        const canvas = document.createElement('canvas');
+        canvas.className = 'poster';
+        canvas.style.cssText = 'width:100%; height:280px; background:#222; display:block; margin:0;';
+        canvas.title = res.title;
+
+        const label = document.createElement('div');
+        label.className = 'poster-card-label';
+        label.textContent = res.title;
+
+        card.appendChild(canvas);
+        card.appendChild(label);
+        return card;
+    }
+
+    function renderCategoryGrid(items) {
+        window.currentDisplayedItems = items;
         const grid = document.getElementById('category-full-grid');
         grid.innerHTML = '';
 
@@ -1032,32 +1145,111 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        const subGrouped = {};
-        items.forEach(r => {
-            const sub = r.resource_type || 'Uncategorized';
-            if (!subGrouped[sub]) subGrouped[sub] = [];
-            subGrouped[sub].push(r);
-        });
+        const isFiltered = checkAnyFilterActive();
 
-        for (const [subCat, subItems] of Object.entries(subGrouped)) {
-            renderHorizontalRow(grid, subCat, subItems);
+        if (isFiltered) {
+            // Render as a flat grid for filtered results
+            grid.style.display = 'grid';
+            grid.style.gridTemplateColumns = 'repeat(auto-fill, minmax(200px, 1fr))';
+            grid.style.gap = '30px';
+            grid.style.padding = '0 4% 50px 4%';
+            
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        const card = entry.target;
+                        const canvas = card.querySelector('canvas');
+                        if (canvas && !canvas.dataset.loaded) {
+                            canvas.dataset.loaded = 'true';
+                            renderPdfThumbnail(card.dataset.filePath, canvas);
+                        }
+                        observer.unobserve(card);
+                    }
+                });
+            }, { threshold: 0.05 });
+
+            items.forEach(res => {
+                const card = createPosterCard(res);
+                grid.appendChild(card);
+                observer.observe(card);
+            });
+        } else {
+            // Default: Grouped Rows
+            grid.style.display = 'block';
+            grid.style.padding = '0';
+            const subGrouped = {};
+            items.forEach(r => {
+                const sub = r.resource_type || 'Uncategorized';
+                if (!subGrouped[sub]) subGrouped[sub] = [];
+                subGrouped[sub].push(r);
+            });
+
+            for (const [subCat, subItems] of Object.entries(subGrouped)) {
+                renderHorizontalRow(grid, subCat, subItems.slice(0, 15));
+            }
         }
     }
 
     // (Removed old category-search listener as it's now handled by applyCategoryFilters via input event array)
 
 
+    const thumbnailQueue = [];
+    let activeThumbnailLoads = 0;
+    const MAX_CONCURRENT_THUMBNAILS = 4; // Increased for faster loading
+    const thumbnailCache = {}; // Session-based cache
+
+    function processThumbnailQueue() {
+        if (activeThumbnailLoads >= MAX_CONCURRENT_THUMBNAILS || thumbnailQueue.length === 0) return;
+        
+        activeThumbnailLoads++;
+        const { url, canvas } = thumbnailQueue.shift();
+        
+        renderPdfThumbnailInternal(url, canvas).finally(() => {
+            activeThumbnailLoads--;
+            processThumbnailQueue();
+        });
+    }
+
     async function renderPdfThumbnail(url, canvas) {
+        thumbnailQueue.push({ url, canvas });
+        processThumbnailQueue();
+    }
+
+    async function renderPdfThumbnailInternal(url, canvas) {
+        // Check session cache first
+        const cacheKey = `thumb_${url}`;
+        const cached = sessionStorage.getItem(cacheKey);
+        if (cached) {
+            const img = new Image();
+            img.onload = () => {
+                canvas.width = img.width;
+                canvas.height = img.height;
+                canvas.getContext('2d').drawImage(img, 0, 0);
+            };
+            img.src = cached;
+            return;
+        }
+
         try {
             const loadingTask = pdfjsLib.getDocument(url);
             const pdf = await loadingTask.promise;
             const page = await pdf.getPage(1);
-            const viewport = page.getViewport({ scale: 0.8 });
+            const viewport = page.getViewport({ scale: 0.5 });
             canvas.width = viewport.width;
             canvas.height = viewport.height;
             const ctx = canvas.getContext('2d');
             await page.render({ canvasContext: ctx, viewport: viewport }).promise;
-        } catch (e) { console.error("PDF thumbnail error:", e); }
+            
+            // Save to cache (limit size to avoid quota issues)
+            try {
+                const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+                if (dataUrl.length < 100000) { // Only cache reasonably sized thumbs
+                    sessionStorage.setItem(cacheKey, dataUrl);
+                }
+            } catch(e) {}
+        } catch (e) { 
+            console.error("PDF thumbnail error:", e); 
+        }
     }
 
     function renderCategories(resources) {
@@ -1068,10 +1260,18 @@ document.addEventListener('DOMContentLoaded', () => {
         if (currentUser) {
             const userGrades = currentUser.grade_level ? currentUser.grade_level.split(',').map(s=>s.trim().toLowerCase()) : [];
             const userSubjects = currentUser.subjects_taught ? currentUser.subjects_taught.split(',').map(s=>s.trim().toLowerCase()) : [];
-            
+            const isStudent = currentUser.role === 'Student / Learner';
+
             const suggested = resources.filter(r => {
                 const rGrade = (r.grade_level||'').toLowerCase();
                 const rSubject = (r.learning_area||'').toLowerCase();
+                
+                if (isStudent) {
+                    // For students, suggest ONLY based on grade level
+                    // and prioritize curriculum resources
+                    return userGrades.includes(rGrade);
+                }
+                
                 return userGrades.includes(rGrade) || userSubjects.includes(rSubject);
             });
 
@@ -1124,36 +1324,26 @@ document.addEventListener('DOMContentLoaded', () => {
              scrollBtnL.style.opacity = '0';
              scrollBtnR.style.opacity = '1'; // keep right arrow visible or semi-transparent
         });
-
         const postersDiv = rowDiv.querySelector('.row-posters');
-        items.forEach(res => {
-            const card = document.createElement('div');
-            card.style.cssText = 'min-width:200px; max-width:200px; margin-right:12px; cursor:pointer; position:relative; border-radius:6px; overflow:hidden; background:#222; transition:transform 0.3s;';
-            card.addEventListener('mouseenter', () => { if (!window.pkgSelectMode) card.style.transform = 'scale(1.05)'; });
-            card.addEventListener('mouseleave', () => { if (!card.classList.contains('pkg-selected')) card.style.transform = 'scale(1)'; });
-            card.addEventListener('click', () => {
-                if (window.pkgSelectMode) { pkgToggleCard(res, card); }
-                else { openModal(res); }
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    const card = entry.target;
+                    const canvas = card.querySelector('canvas');
+                    const filePath = card.dataset.filePath;
+                    if (canvas && !canvas.dataset.loaded) {
+                        canvas.dataset.loaded = 'true';
+                        renderPdfThumbnail(filePath, canvas);
+                    }
+                    observer.unobserve(card);
+                }
             });
-            // Checkmark overlay for select mode
-            const pkgOverlay = document.createElement('div');
-            pkgOverlay.className = 'pkg-check-overlay';
-            pkgOverlay.innerHTML = '<i class="fas fa-check"></i>';
-            card.appendChild(pkgOverlay);
+        }, { threshold: 0.05 });
 
-            const canvas = document.createElement('canvas');
-            canvas.className = 'poster';
-            canvas.style.cssText = 'width:100%; height:280px; background:#222; display:block; margin:0;';
-            canvas.title = res.title;
-
-            const label = document.createElement('div');
-            label.style.cssText = 'padding:8px; font-size:0.8rem; color:#ddd; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;';
-            label.textContent = res.title;
-
-            card.appendChild(canvas);
-            card.appendChild(label);
+        items.forEach(res => {
+            const card = createPosterCard(res);
             postersDiv.appendChild(card);
-            renderPdfThumbnail(res.file_path, canvas);
+            observer.observe(card);
         });
 
         const leftBtn = rowDiv.querySelector('.scroll-left');
@@ -1299,6 +1489,21 @@ document.addEventListener('DOMContentLoaded', () => {
         modal.style.setProperty('display', 'none', 'important');
         document.body.style.setProperty('overflow', 'auto', 'important');
         currentResource = null;
+    });
+
+    // Close modals on outside click
+    window.addEventListener('click', (e) => {
+        const modals = document.querySelectorAll('.modal-overlay');
+        modals.forEach(m => {
+            // Check if clicked exactly on the overlay (not its children)
+            if (e.target === m) {
+                m.classList.add('hidden');
+                m.classList.remove('active');
+                m.style.setProperty('display', 'none', 'important');
+                document.body.style.setProperty('overflow', 'auto', 'important');
+                if (m.id === 'resource-modal') currentResource = null;
+            }
+        });
     });
 
     window.submitLRComment = () => {
@@ -1553,6 +1758,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     btnView.addEventListener('click', () => {
         if (!currentResource) return;
+        
+        // Log view action
+        fetch(`api/resources.php?action=view&id=${currentResource.id}`).catch(() => {});
+        
         const viewer = document.getElementById('pdf-viewer-modal');
 
         // Hide the resource modal, open the PDF viewer
@@ -1601,7 +1810,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (data.success && data.related && data.related.length > 0) {
                     data.related.forEach(res => {
                         const canvas = document.createElement('canvas');
-                        canvas.className = 'poster';
+                        canvas.className = 'poster poster-sm';
                         canvas.style.backgroundColor = '#222';
                         canvas.title = res.title;
                         canvas.addEventListener('click', () => {
@@ -1714,10 +1923,100 @@ document.addEventListener('DOMContentLoaded', () => {
         pkgUpdateBar();
     };
 
-    window.pkgDownloadAll = function () {
+    window.pkgDownloadAll = async function () {
+        const lrType = document.getElementById('filter-lr-type')?.value;
+        const schoolLevel = document.getElementById('filter-school-level')?.value;
+        const gradeLevel = document.getElementById('filter-grade-level')?.value;
+        const quarter = document.getElementById('filter-quarter')?.value;
+        const learningArea = document.getElementById('filter-learning-area')?.value;
+
+        if (!lrType || !schoolLevel || !gradeLevel || !quarter || !learningArea) {
+            pkgShowToast('Please filter by LR Type, Level, Grade, Quarter, and Subject Area first.', 'warning');
+            return;
+        }
+
         const items = window.currentDisplayedItems || [];
         if (items.length === 0) { pkgShowToast('No LRs to download in the current view.', 'warning'); return; }
         const ids   = items.slice(0, 30).map(r => r.id);
+        
+        // Confirmation Modal
+        const confirmed = await new Promise((resolve) => {
+            const overlay = document.createElement('div');
+            overlay.className = 'modal-overlay';
+            overlay.style.zIndex = '9999999';
+            
+            const content = document.createElement('div');
+            content.className = 'modal-content';
+            content.style.maxWidth = '500px';
+            content.style.textAlign = 'left';
+            content.style.padding = '1.5rem';
+            
+            const category = document.getElementById('category-full-title')?.innerText || 'N/A';
+            const previewItems = items.slice(0, 30);
+            const titlesHtml = previewItems.map((r, i) =>
+                `<div style="display:flex; align-items:center; gap:8px; padding:5px 0; border-bottom:1px solid #2a2a2a;">
+                    <span style="color:#3498db; font-weight:700; min-width:22px; font-size:0.8rem;">${i + 1}.</span>
+                    <span style="color:#ddd; font-size:0.82rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${r.title || 'Untitled'}</span>
+                </div>`
+            ).join('');
+
+            const row = (label, val) => `<div style="display:flex; justify-content:space-between; padding:5px 0; border-bottom:1px solid #2a2a2a;">
+                <span style="color:#888; font-size:0.82rem;">${label}</span>
+                <span style="color:#eee; font-size:0.82rem; font-weight:600;">${val || '—'}</span>
+            </div>`;
+
+            content.innerHTML = `
+                <div style="display:flex; align-items:center; gap:12px; margin-bottom:1.2rem; text-align:left;">
+                    <div style="width:48px; height:48px; background:rgba(52,152,219,0.15); border-radius:50%; display:flex; align-items:center; justify-content:center; color:#3498db; font-size:1.4rem; flex-shrink:0;">
+                        <i class="fas fa-box-open"></i>
+                    </div>
+                    <div>
+                        <h2 style="margin:0; font-size:1.1rem;">Confirm Batch Download</h2>
+                        <p style="margin:2px 0 0; color:#888; font-size:0.8rem;">Review what will be packaged and downloaded</p>
+                    </div>
+                </div>
+
+                <div style="background:#1a1a1a; border:1px solid #2a2a2a; border-radius:8px; padding:12px; margin-bottom:1rem; text-align:left;">
+                    <div style="color:#3498db; font-size:0.75rem; font-weight:700; letter-spacing:1px; margin-bottom:8px; text-transform:uppercase;">Filter Summary</div>
+                    ${row('Category', category)}
+                    ${row('LR Type', lrType)}
+                    ${row('School Level', schoolLevel)}
+                    ${row('Grade Level', gradeLevel)}
+                    ${row('Quarter', 'Q' + quarter)}
+                    ${row('Subject Area', learningArea)}
+                </div>
+
+                <div style="background:#1a1a1a; border:1px solid #2a2a2a; border-radius:8px; padding:12px; margin-bottom:1.2rem; text-align:left;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                        <span style="color:#3498db; font-size:0.75rem; font-weight:700; letter-spacing:1px; text-transform:uppercase;">Resources to Download</span>
+                        <span style="background:#3498db; color:#fff; font-size:0.75rem; font-weight:700; padding:2px 8px; border-radius:10px;">${previewItems.length} LR${previewItems.length !== 1 ? 's' : ''}</span>
+                    </div>
+                    <div style="max-height:160px; overflow-y:auto; padding-right:4px;">${titlesHtml}</div>
+                    ${items.length > 30 ? `<p style="color:#e67e22; font-size:0.78rem; margin:8px 0 0; text-align:center;"><i class="fas fa-exclamation-triangle"></i> Only the first 30 of ${items.length} results will be packaged.</p>` : ''}
+                </div>
+
+                <div style="display:flex; gap:10px; justify-content:flex-end;">
+                    <button class="btn btn-secondary" id="pkg-confirm-cancel" style="padding:8px 20px;">Cancel</button>
+                    <button class="btn btn-primary" id="pkg-confirm-ok" style="padding:8px 20px;"><i class="fas fa-download"></i> Yes, Download</button>
+                </div>
+            `;
+
+            
+            overlay.appendChild(content);
+            document.body.appendChild(overlay);
+            
+            document.getElementById('pkg-confirm-cancel').addEventListener('click', () => {
+                document.body.removeChild(overlay);
+                resolve(false);
+            });
+            document.getElementById('pkg-confirm-ok').addEventListener('click', () => {
+                document.body.removeChild(overlay);
+                resolve(true);
+            });
+        });
+
+        if (!confirmed) return;
+
         const hints = pkgGetHints();
         pkgTriggerDownload(ids, hints);
     };

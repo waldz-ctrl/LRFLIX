@@ -139,10 +139,15 @@ document.addEventListener('DOMContentLoaded', () => {
         const targetEl = document.getElementById(targetId);
         if(targetEl) targetEl.style.display = 'block';
         
-        // Load feedback when switching to it
+        // Load data when switching to it
         if(targetId === 'analytics-section') loadAnalytics();
         if(targetId === 'feedbacks-section') loadFeedbacks();
         if(targetId === 'comp-section') loadCompetencies();
+        if(targetId === 'manage-usr-section') loadUsers();
+        if(targetId === 'manage-res-section') {
+            loadResources();
+            updateResourceFilters();
+        }
     };
     const switchTab = window.switchTab;
 
@@ -411,6 +416,39 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // Handle Enter/Space on Success Modal to prevent form resubmission
+    document.addEventListener('keydown', (e) => {
+        if (!actionModal.classList.contains('hidden') && !closeActionModal.classList.contains('hidden')) {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                closeActionModal.click();
+            }
+        }
+    });
+
+    const toggleFieldSpinners = (level, show) => {
+        const order = ['category', 'school_level', 'key_stage', 'grade', 'learning_area', 'quarter', 'term', 'week', 'comp'];
+        const idx = order.indexOf(level);
+        const spinners = {
+            'school_level': ['spin-res-key-stage'],
+            'key_stage': ['spin-res-grade'],
+            'grade': ['spin-res-learning-area'],
+            'learning_area': ['spin-res-quarter', 'spin-res-term'],
+            'quarter': ['spin-res-week'],
+            'term': ['spin-res-week'],
+            'week': ['spin-res-comp']
+        };
+
+        const toToggle = spinners[level] || [];
+        toToggle.forEach(sid => {
+            const el = document.getElementById(sid);
+            if (el) {
+                if (show) el.classList.remove('hidden');
+                else el.classList.add('hidden');
+            }
+        });
+    };
+
     uploadForm?.addEventListener('submit', (e) => {
         e.preventDefault();
         
@@ -559,9 +597,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     function loadAdminData() {
-        loadUsers();
+        // Only load resources initially as it's needed for the duplicate check in the upload form
         loadResources();
-        updateResourceFilters();
     }
 
     // Chart instances (to destroy before redraw)
@@ -575,7 +612,7 @@ document.addEventListener('DOMContentLoaded', () => {
         downloadsCategory: { period: 'day', date: '' }
     };
     const usersState = { page: 1, perPage: 10, search: '', school: '', position: '' };
-    const resourcesState = { page: 1, perPage: 10, search: '', sortBy: 'downloads_count', sortOrder: 'desc' };
+    const resourcesState = { page: 1, perPage: 10, search: '', sortBy: 'downloads_count', sortOrder: 'desc', category: '', type: '', curriculum: '', level: '', grade: '', subject: '' };
     const feedbackState = { page: 1, perPage: 10 };
     const commentsState = { page: 1, perPage: 10 };
     let allUsers = [];
@@ -684,33 +721,95 @@ document.addEventListener('DOMContentLoaded', () => {
         }));
     }
 
-    function renderBarChart(setter, canvasId, labels, values, palette, datasetLabel) {
+    function renderStackedBarChart(setter, canvasId, labels, datasets, palette) {
         if (setter.get()) setter.get().destroy();
         const ctx = document.getElementById(canvasId).getContext('2d');
+        
+        // Map palette to datasets
+        datasets.forEach((ds, i) => {
+            ds.backgroundColor = palette[i % palette.length];
+            ds.borderRadius = 0;
+            ds.borderWidth = 0;
+            ds.barThickness = 45;
+        });
+
         setter.set(new Chart(ctx, {
             type: 'bar',
-            data: { labels, datasets: [{ label: datasetLabel, data: values, backgroundColor: palette.slice(0, labels.length), borderRadius: 6, borderWidth: 0, barThickness: 40 }] },
+            data: { labels, datasets },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                plugins: { 
-                    legend: { display: false }, 
-                    datalabels: { 
+                plugins: {
+                    legend: { 
+                        display: true, 
+                        position: 'bottom',
+                        labels: { color: '#aaa', boxWidth: 12, font: { size: 10 } }
+                    },
+                    tooltip: { mode: 'index', intersect: false },
+                    datalabels: {
                         display: (ctx) => ctx.dataset.data[ctx.dataIndex] > 0,
-                        anchor: 'end', 
-                        align: 'top', 
-                        color: '#fff', 
-                        font: { weight: 'bold', size: 12 }, 
-                        formatter: (val) => val 
-                    } 
+                        color: '#fff',
+                        font: { weight: 'bold', size: 10 },
+                        formatter: (val) => val
+                    }
                 },
                 scales: {
-                    x: { ticks: { color: '#aaa', font: { size: 11 } }, grid: { display: false } },
-                    y: { ticks: { color: '#aaa', stepSize: 1 }, grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true, grace: '15%' }
+                    x: { stacked: true, ticks: { color: '#aaa', font: { size: 10 } }, grid: { display: false } },
+                    y: { stacked: true, ticks: { color: '#aaa', stepSize: 1 }, grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true, grace: '10%' }
                 }
             },
-            plugins: [ChartDataLabels]
+            plugins: [
+                ChartDataLabels,
+                {
+                    id: 'topTotals',
+                    afterDatasetsDraw: (chart) => {
+                        const { ctx, data, scales: { x, y } } = chart;
+                        ctx.save();
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'bottom';
+                        ctx.font = 'bold 12px Inter, sans-serif';
+                        ctx.fillStyle = '#fff';
+
+                        data.labels.forEach((label, i) => {
+                            let total = 0;
+                            data.datasets.forEach((dataset) => {
+                                // Only sum if the dataset is visible in the legend
+                                if (chart.isDatasetVisible(data.datasets.indexOf(dataset))) {
+                                    total += dataset.data[i];
+                                }
+                            });
+                            
+                            const xPos = x.getPixelForValue(label);
+                            const yPos = y.getPixelForValue(total);
+                            
+                            if (total > 0) {
+                                ctx.fillText(total, xPos, yPos - 8);
+                                // Optional: Add "Total" text above the number if preferred, but usually just number is cleaner
+                            }
+                        });
+                        ctx.restore();
+                    }
+                }
+            ]
         }));
+    }
+
+    function prepareStackedData(rawData) {
+        // rawData: array of {category, resource_type, total}
+        const categories = [...new Set(rawData.map(d => d.category || 'Uncategorized'))];
+        const lrTypes = [...new Set(rawData.map(d => d.resource_type || 'General'))];
+        
+        const datasets = lrTypes.map(type => {
+            return {
+                label: type,
+                data: categories.map(cat => {
+                    const found = rawData.find(d => (d.category || 'Uncategorized') === cat && (d.resource_type || 'General') === type);
+                    return found ? parseInt(found.total) : 0;
+                })
+            };
+        });
+        
+        return { labels: categories, datasets };
     }
 
     function loadAnalytics(targetChartKey = null) {
@@ -730,7 +829,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (targetChartKey === 'downloadsCategory') {
             fetch(buildAnalyticsUrl(analyticsFilters.downloadsCategory)).then(r => r.json()).then(data => {
-                if (data.success) renderBarChart({ get: () => chartCat, set: (v) => chartCat = v }, 'chart-downloads-category', data.category_data.map(d => d.category || 'Uncategorized'), data.category_data.map(d => parseInt(d.total)), palette, 'Downloads per Category');
+                if (data.success) {
+                    const stacked = prepareStackedData(data.category_data);
+                    renderStackedBarChart({ get: () => chartCat, set: (v) => chartCat = v }, 'chart-downloads-category', stacked.labels, stacked.datasets, palette);
+                }
             });
             return;
         }
@@ -747,12 +849,17 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('stat-resources').textContent = summaryData.totals.resources;
             document.getElementById('stat-downloads').textContent = summaryData.totals.downloads;
             document.getElementById('stat-likes').textContent = summaryData.totals.likes;
+            document.getElementById('stat-views').textContent = summaryData.totals.views;
             document.getElementById('stat-visits').textContent = summaryData.totals.visits;
             
             renderLineChart({ get: () => chartVisits, set: (v) => chartVisits = v }, 'chart-visits-time', visitsData.visit_time_data.map(d => d.period_label), visitsData.visit_time_data.map(d => parseInt(d.total)), '#9b59b6', 'Visits');
             renderLineChart({ get: () => chartTime, set: (v) => chartTime = v }, 'chart-downloads-time', downloadsTimeData.time_data.map(d => d.period_label), downloadsTimeData.time_data.map(d => parseInt(d.total)), '#e50914', 'Downloads');
-            renderBarChart({ get: () => chartCat, set: (v) => chartCat = v }, 'chart-downloads-category', downloadsCategoryData.category_data.map(d => d.category || 'Uncategorized'), downloadsCategoryData.category_data.map(d => parseInt(d.total)), palette, 'Downloads per Category');
-            renderBarChart({ get: () => chartResCat, set: (v) => chartResCat = v }, 'chart-resources-category', summaryData.resources_per_category.map(d => d.category || 'Uncategorized'), summaryData.resources_per_category.map(d => parseInt(d.total)), palette, 'Resources');
+            
+            const dlStacked = prepareStackedData(downloadsCategoryData.category_data);
+            renderStackedBarChart({ get: () => chartCat, set: (v) => chartCat = v }, 'chart-downloads-category', dlStacked.labels, dlStacked.datasets, palette);
+            
+            const resStacked = prepareStackedData(summaryData.resources_per_category);
+            renderStackedBarChart({ get: () => chartResCat, set: (v) => chartResCat = v }, 'chart-resources-category', resStacked.labels, resStacked.datasets, palette);
             
             const tbody = document.querySelector('#top-resources-table tbody');
             tbody.innerHTML = '';
@@ -860,6 +967,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function loadUsers() {
+        const tbody = document.querySelector('#users-table tbody');
+        if(tbody && tbody.innerHTML === '') {
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;">Loading users...</td></tr>';
+        }
         fetch('api/users.php?action=list')
             .then(res => res.json())
             .then(data => {
@@ -892,7 +1003,16 @@ document.addEventListener('DOMContentLoaded', () => {
         tbody.innerHTML = '';
         const sortBy = resourcesState.sortBy;
         const sortOrder = resourcesState.sortOrder;
-        const filtered = allResources.filter(r => !resourcesState.search || (r.title || '').toLowerCase().includes(resourcesState.search)).sort((a, b) => {
+        const filtered = allResources.filter(r => {
+            const searchMatch = !resourcesState.search || (r.title || '').toLowerCase().includes(resourcesState.search);
+            const catMatch = !resourcesState.category || r.category === resourcesState.category;
+            const typeMatch = !resourcesState.type || (r.resource_type || r.camp_type || r.material_type) === resourcesState.type;
+            const currMatch = !resourcesState.curriculum || r.curriculum === resourcesState.curriculum;
+            const levelMatch = !resourcesState.level || r.school_level === resourcesState.level;
+            const gradeMatch = !resourcesState.grade || (r.grade_level || '').includes(resourcesState.grade);
+            const subjMatch = !resourcesState.subject || (r.learning_area === resourcesState.subject || r.subject === resourcesState.subject);
+            return searchMatch && catMatch && typeMatch && currMatch && levelMatch && gradeMatch && subjMatch;
+        }).sort((a, b) => {
             let valA = a[sortBy] || '';
             let valB = b[sortBy] || '';
             if (['downloads_count', 'likes_count'].includes(sortBy)) {
@@ -946,6 +1066,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function loadResources() {
+        const tbody = document.querySelector('#resources-table tbody');
+        if(tbody && (tbody.innerHTML === '' || tbody.innerHTML.includes('No resources found'))) {
+             tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;">Loading resources...</td></tr>';
+        }
         fetch('api/resources.php?action=list')
             .then(res => res.json())
             .then(data => {
@@ -959,6 +1083,36 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('resources-search')?.addEventListener('input', (e) => {
         resourcesState.search = e.target.value.trim().toLowerCase();
         resourcesState.page = 1;
+        renderResourcesTable();
+    });
+
+    ['res-filter-category', 'res-filter-type', 'res-filter-curriculum', 'res-filter-level', 'res-filter-grade', 'res-filter-subject'].forEach(id => {
+        document.getElementById(id)?.addEventListener('change', (e) => {
+            const key = id.replace('res-filter-', '');
+            resourcesState[key] = e.target.value;
+            resourcesState.page = 1;
+            renderResourcesTable();
+        });
+    });
+
+    document.getElementById('resources-clear-filters-btn')?.addEventListener('click', () => {
+        resourcesState.search = '';
+        resourcesState.category = '';
+        resourcesState.type = '';
+        resourcesState.curriculum = '';
+        resourcesState.level = '';
+        resourcesState.grade = '';
+        resourcesState.subject = '';
+        resourcesState.page = 1;
+
+        const searchInput = document.getElementById('resources-search');
+        if (searchInput) searchInput.value = '';
+        
+        ['res-filter-category', 'res-filter-type', 'res-filter-curriculum', 'res-filter-level', 'res-filter-grade', 'res-filter-subject'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.value = '';
+        });
+
         renderResourcesTable();
     });
     window.toggleResourceSort = (field) => {
@@ -1604,7 +1758,9 @@ function buildUploadUrl() {
 // ===== Fetch options and populate multiple downstream select fields =====
 function fetchAndPopulateDownstream(level) {
     const url = buildUploadUrl();
+    toggleFieldSpinners(level, true);
     return fetch(url).then(r => r.json()).then(data => {
+        toggleFieldSpinners(level, false);
         if(!data.success || !data.data) return;
         
         const setOpts = (id, options, defaultText) => {
@@ -1711,9 +1867,12 @@ document.getElementById('res-week')?.addEventListener('change', function() {
 // ===== Code Field: Auto-fill =====
 document.getElementById('res-code')?.addEventListener('change', function() {
     const code = this.value.trim(); if(!code) return;
+    const codeSpin = document.getElementById('spin-res-code');
+    if(codeSpin) codeSpin.classList.remove('hidden');
     fetch(`api/competencies.php?action=get_by_code&code=${encodeURIComponent(code)}`)
         .then(r => r.json())
         .then(data => {
+            if(codeSpin) codeSpin.classList.add('hidden');
             if(!data.success) return;
             if(data.multiple) {
                 showCodePickerModal(data.data, (chosen) => applyCompetencyToForm(chosen));
@@ -1878,6 +2037,11 @@ window.confirmClearAllCompetencies = () => {
         confirmText: 'Clear All'
     }).then(confirmed => {
         if(confirmed) {
+            const pin = prompt("Please enter the administrator PIN to clear all data:");
+            if (pin !== "137946") {
+                if (pin !== null) alert("Incorrect PIN. Access denied.");
+                return;
+            }
             fetch('api/competencies.php?action=truncate', { method: 'POST' })
                 .then(r => r.json())
                 .then(data => {
@@ -1890,6 +2054,11 @@ window.confirmClearAllCompetencies = () => {
 };
 
 window.confirmImportCSV = () => {
+    const pin = prompt("Please enter the administrator PIN to import data:");
+    if (pin !== "137946") {
+        if (pin !== null) alert("Incorrect PIN. Access denied.");
+        return;
+    }
     document.getElementById('comp-csv-upload').click();
 };
 
@@ -1910,6 +2079,7 @@ function updateResourceFilters() {
                     el.value = prev;
                 };
                 setDrop('res-filter-category',   data.data.categories,    'All Categories');
+                setDrop('res-filter-type',       data.data.resource_types, 'All LR Types');
                 setDrop('res-filter-curriculum',  data.data.curriculums,   'All Curriculums');
                 setDrop('res-filter-level',       data.data.school_levels, 'All School Levels');
                 setDrop('res-filter-grade',       data.data.grades,        'All Grade Levels');

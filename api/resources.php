@@ -67,38 +67,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
         $related = [];
         if ($current) {
-            $conditions = [];
-            $params = [];
-            
-            // 1. Same competencies
             $compList = array_filter(array_map('trim', explode(',', $current['competencies'] ?? '')));
-            if (!empty($compList)) {
-                $compConds = [];
-                foreach ($compList as $comp) {
-                    $compConds[] = "FIND_IN_SET(?, competencies)";
-                    $params[] = $comp;
-                }
-                $conditions[] = "(" . implode(' OR ', $compConds) . ")";
-            }
-            
-            // 2. Same grade level & subject
             $grade = $current['grade_level'] ?? '';
             $subject = $current['learning_area'] ?? '';
+
+            $conditions = [];
+            $scoreParams = [];
+            
+            // Priority 1: Same competencies (Weight 2)
+            $compScoreSql = "0";
+            if (!empty($compList)) {
+                $compConds = [];
+                $scoreParts = [];
+                foreach ($compList as $comp) {
+                    $compConds[] = "FIND_IN_SET(?, competencies)";
+                    $scoreParts[] = "CASE WHEN FIND_IN_SET(?, competencies) THEN 2 ELSE 0 END";
+                    $scoreParams[] = $comp;
+                }
+                $conditions[] = "(" . implode(' OR ', $compConds) . ")";
+                $compScoreSql = "(" . implode(' + ', $scoreParts) . ")";
+            }
+
+            // Priority 2: Same grade level & subject (Weight 1)
+            $gradeScoreSql = "0";
             if (!empty($grade) && !empty($subject)) {
                 $conditions[] = "(grade_level = ? AND learning_area = ?)";
-                $params[] = $grade;
-                $params[] = $subject;
+                $gradeScoreSql = "CASE WHEN (grade_level = ? AND learning_area = ?) THEN 1 ELSE 0 END";
+                $scoreParams[] = $grade;
+                $scoreParams[] = $subject;
             }
 
             if (!empty($conditions)) {
-                $finalParams = [$_SESSION['user_id'], $resourceId];
-                foreach($params as $p) {
-                    $finalParams[] = $p;
-                }
+                // Building params for the whole query
+                // Order: user_liked_param, id_param, cond_params..., score_params...
+                
+                $condParams = [];
+                foreach($compList as $comp) $condParams[] = $comp;
+                if(!empty($grade)) { $condParams[] = $grade; $condParams[] = $subject; }
+
+                $finalParams = array_merge([$_SESSION['user_id'], $resourceId], $condParams, $scoreParams);
 
                 $sql = "SELECT r.*, 
                         (SELECT COUNT(*) FROM likes l WHERE l.resource_id = r.id AND l.user_id = ?) as user_liked 
-                        FROM resources r WHERE id != ? AND (" . implode(' OR ', $conditions) . ") ORDER BY created_at DESC LIMIT 10";
+                        FROM resources r 
+                        WHERE id != ? AND (" . implode(' OR ', $conditions) . ") 
+                        ORDER BY ($compScoreSql + $gradeScoreSql) DESC, created_at DESC 
+                        LIMIT 15";
 
                 $stmt = $pdo->prepare($sql);
                 $stmt->execute($finalParams);
@@ -106,6 +120,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             }
         }
         echo json_encode(['success' => true, 'related' => $related]);
+        exit;
     }
     elseif ($action === 'user_history') {
         if (!isLoggedIn()) {
@@ -162,6 +177,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
         echo json_encode(['success' => true, 'data' => [
             'categories' => $getDistinct('category'),
+            'resource_types' => $getDistinct('resource_type'),
             'curriculums' => $getDistinct('curriculum'),
             'school_levels' => $getDistinct('school_level'),
             'grades' => $getDistinct('grade_level'),
@@ -183,7 +199,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         echo json_encode(['success' => true, 'feedbacks' => $feedbacks]);
     }
 }
-elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'comment') {
         if (!isLoggedIn()) {
             echo json_encode(['success' => false, 'message' => 'Not logged in']);

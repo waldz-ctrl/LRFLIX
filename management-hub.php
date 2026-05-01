@@ -136,7 +136,7 @@ if (!isAdmin()) {
                 </div>
 
                 <div class="input-group dynamic-field-group" id="group-type" style="padding: 0 10px !important; display:none;">
-                    <label id="label-type">LR Type</label>
+                    <label id="label-type">LR Type <i class="fas fa-spinner fa-spin hidden" id="spin-res-type"></i></label>
                     <select id="res-type" style="width: 100%; padding: 0.9rem; border-radius: 4px; background: #333; color: white;">
                         <option value="">Select...</option>
                     </select>
@@ -172,7 +172,7 @@ if (!isAdmin()) {
                 </div>
 
                 <div class="input-group dynamic-field-group" id="group-material-type" style="padding: 0 10px !important; display:none;">
-                    <label id="label-material-type">Material Type</label>
+                    <label id="label-material-type">Material Type <i class="fas fa-spinner fa-spin hidden" id="spin-res-material-type"></i></label>
                     <select id="res-material-type" style="width: 100%; padding: 0.9rem; border-radius: 4px; background: #333; color: white;">
                         <option value="">Select...</option>
                         <!-- Options dynamically loaded -->
@@ -256,7 +256,7 @@ if (!isAdmin()) {
                 </div>
 
                 <div class="input-group dynamic-field-group" id="group-comp" style="grid-column: 1 / -1; padding: 0 10px !important; display:none;">
-                    <label>Learning Competency (MELC) <button type="button" id="add-comp-btn" style="background:transparent; color: var(--red, #e50914); font-weight:bold; border:none; cursor:pointer;">+ Add Another</button></label>
+                    <label>Learning Competency (MELC) <i class="fas fa-spinner fa-spin hidden" id="spin-res-comp"></i> <button type="button" id="add-comp-btn" style="background:transparent; color: var(--red, #e50914); font-weight:bold; border:none; cursor:pointer;">+ Add Another</button></label>
                     <div id="competencies-group">
                         <div class="comp-select-wrapper" style="margin-bottom: 10px; position: relative;">
                             <select class="res-comp-select" id="res-comp-select" style="width: 100%; padding: 0.9rem; border-radius: 4px; background: #333; color: white;">
@@ -268,7 +268,7 @@ if (!isAdmin()) {
                 </div>
                 
                 <div class="input-group dynamic-field-group" id="group-code" style="padding: 0 10px !important; display:none;">
-                    <label>Code</label>
+                    <label>Code <i class="fas fa-spinner fa-spin hidden" id="spin-res-code"></i></label>
                     <input type="text" id="res-code" style="padding:12px 15px;" placeholder="Paste code here to auto-fill">
                 </div>
                 
@@ -324,6 +324,9 @@ if (!isAdmin()) {
                 <select id="res-filter-category" style="padding:0.8rem 0.9rem; border-radius:6px; background:#222; border:1px solid #333; color:white;">
                     <option value="">All Categories</option>
                 </select>
+                <select id="res-filter-type" style="padding:0.8rem 0.9rem; border-radius:6px; background:#222; border:1px solid #333; color:white;">
+                    <option value="">All LR Types</option>
+                </select>
                 <select id="res-filter-curriculum" style="padding:0.8rem 0.9rem; border-radius:6px; background:#222; border:1px solid #333; color:white;">
                     <option value="">All Curriculum</option>
                 </select>
@@ -336,6 +339,8 @@ if (!isAdmin()) {
                 <select id="res-filter-subject" style="padding:0.8rem 0.9rem; border-radius:6px; background:#222; border:1px solid #333; color:white;">
                     <option value="">All Subjects</option>
                 </select>
+
+                <button class="btn btn-secondary" id="resources-clear-filters-btn" type="button" style="padding:0.8rem 1.2rem; border-radius:6px; background:#333; border:1px solid #444; color:#fff;" title="Clear All Filters"><i class="fas fa-sync-alt"></i> Clear</button>
 
                 <button class="btn btn-danger hidden" id="resources-batch-delete-btn" type="button" onclick="confirmBatchDeleteResources()"><i class="fas fa-trash-alt"></i> Delete Selected</button>
             </div>
